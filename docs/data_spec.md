@@ -1,6 +1,6 @@
 # 드론 플레이 기록 명세 초안
 
-상태: **설계 초안, 기록기는 미구현**. `schema_version: "0.1.3"`.
+상태: **설계 초안, 기록기는 미구현**. `schema_version: "0.1.4"`.
 M1~M3에서 검증하고 M3의 소량 파이프라인 시험을 통과한 뒤 형식을 확정한다.
 이 문서가 기록 형식의 기준이다. 변경 전 사용자에게 알리고 스키마 버전을 올린다.
 물리 계산을 바꿀 때는 별도로 `physics_version`도 올린다.
@@ -53,28 +53,31 @@ M1~M3에서 검증하고 M3의 소량 파이프라인 시험을 통과한 뒤 �
 
 | 필드 | 내용 |
 |---|---|
-| schema_version | 기록 구조 버전. 이 초안은 0.1.3 |
+| schema_version | 기록 구조 버전. 이 초안은 0.1.4 |
 | recording_id, session_id | 충돌 방지 ID. 세션/랩 분할 및 중복 검사에 사용 |
 | created_at_utc | UTC ISO 8601 시각. 시뮬레이션 시간과 별도 |
-| track | 트랙 ID, 버전, 콘텐츠 해시. 게이트 순서와 좌표를 재현할 수 있는 불변 자산 참조 |
+| track | 트랙 ID, 버전, 콘텐츠 해시. M1 현재 `training-five-v2`, `race-five-v2`. v2는 게이트 프레임 0.22 m와 지면 지지대를 시각/충돌 공통 형상으로 사용한다 |
 | ruleset | ID, 버전, 모드, 페널티, 완주 조건, 설정 스냅샷/해시 |
 | aircraft_profile | ID, 버전, 질량·관성·모터·항력 등 전체 설정 스냅샷/해시 및 단위 |
 | rates | 모델 ID/버전, roll/pitch/yaw의 최대 각속도(rad/s), 전체 파라미터. M1의 Betaflight식 곡선은 rcRate, superRate, expo(모두 무차원)를 사용하며 최대 각속도는 곡선 끝점에서 산출한다. 현재 세 축 공통 |
 | input_device | 종류(gamepad/usb-controller 등), 브라우저 장치 매핑 정보, 축/버튼 매핑, 반전·데드존·끝점 보정. 일련번호는 수집하지 않음 |
 | display | 화면 주사율 추정치(Hz, 알 수 없으면 null), 측정 방법, 실제 렌더 fps, 뷰포트 크기, devicePixelRatio. 추정치를 모니터 사양으로 단정하지 않음 |
-| physics_version | 사용한 공유 물리의 불변 버전과 소스 커밋. 현재 M1은 정수 2(첫 Acro 계산 1 → 쉬운 조종 보조기 추가 2). 파라미터 변경은 전체 프로파일 스냅샷에도 반영 |
+| physics_version | 사용한 공유 물리의 불변 버전과 소스 커밋. 현재 M1은 정수 3(1: 첫 Acro 계산 → 2: 쉬운 조종 보조기 → 3: 게이트 프레임/지지대와 드론 반경의 충돌 의미 정합화). 파라미터 변경은 전체 프로파일 스냅샷에도 반영 |
 | control_profile | mode: acro 또는 assisted, 보조기 버전 및 전체 설정. M1 assisted v1은 수평 목표 속도 4 m/s, 수직 목표 속도 ±2 m/s, 요 각속도 최대 π/3 rad/s. 게인·가속 제한도 packages/physics의 ASSIST_SETTINGS 스냅샷으로 남김 |
 | physics_hz | 고정 물리 주기. 초안 240 |
 | seed, prng | 난수 시드와 알고리즘/버전. Math.random/실제 시계를 물리에서 사용하지 않음 |
 | initial_state | 강체·제어기·모터·환경의 완전한 초기 상태. states[0] 등과 일치 |
 | environment | 중력 벡터(m/s²), 바람(m/s), 기타 물리에 영향을 주는 설정/버전 |
-| camera | 기체 상대 위치(m), 자세, **수직 FOV(vertical FOV, rad)**, 화면 비율(aspect ratio), 뷰포트 width/height(px), devicePixelRatio, near/far(m). 같은 투영 화면을 다시 만들 수 있도록 FOV 단독 저장을 금지 |
+| camera | `mode`(`chase`/`fpv`), 기체 상대 위치(m), 자세, **수직 FOV(vertical FOV, rad)**, 화면 비율(aspect ratio), 뷰포트 width/height(px), devicePixelRatio, near/far(m), `artificial_horizon_enabled`. 같은 투영 화면을 다시 만들 수 있도록 FOV 단독 저장을 금지 |
+| practice_assist | `height_assist_enabled`. 훈련장 또는 assisted에서만 유효하며 다음 게이트 중심과 기체의 Y 차이를 표시한다. 사용자가 끈 경우 false |
 | client_build, runtime | 클라이언트 커밋/빌드, 브라우저/OS 버전. 불필요한 개인 식별 정보 제외 |
 | consent | granted(boolean), scope, policy_version, granted_at_utc 또는 null. 기본 미동의 |
 | outcome | complete/aborted/invalid, 마지막 tick, 게이트 결과, 중단 이유. 서버 검증 결과와 구분 |
 
 랭킹 비교 키에는 최소 트랙 버전·룰셋 버전·physics_version을 포함한다.
-조종 모드와 보조기 버전도 분리한다. **쉬운 조종과 Acro는 순위와 학습 데이터 모두 별도 파티션**으로 취급하며 기본 Acro 학습 데이터에 assisted 기록을 섞지 않는다. 파티션 키는 최소 `track_id + control_mode + aircraft_profile_version + assist_version`을 포함한다. Acro의 assist_version은 null/none이다.
+조종 모드와 보조기 버전도 분리한다. **쉬운 조종과 Acro는 순위와 학습 데이터 모두 별도 파티션**으로 취급하며 기본 Acro 학습 데이터에 assisted 기록을 섞지 않는다.
+M1 학습/세션 파티션 키는 최소 `track_id + control_mode + aircraft_profile_version + assist_version + camera_mode + artificial_horizon_enabled + height_assist_enabled`을 포함한다. Acro의 assist_version은 null/none이다.
+카메라 또는 시각 보조를 변경하면 같은 조종 모드라도 별도 조건으로 취급한다. 대회용 Acro에서는 `height_assist_enabled=false`다.
 기체/rates 자유 조정 허용 여부도 룰셋으로 정하고 필요한 경우 비교 키에 반영한다.
 설정은 ID만으로 끝내지 않고 스냅샷 또는 내용 주소(해시)로 과거 값을 찾을 수 있게 한다.
 
@@ -136,8 +139,8 @@ recordings/<recording_id>/
 
 ## 변경 이력
 
+- 0.1.4 (2026-09-26): 게이트 프레임/지지대 충돌 의미를 시각 형상과 통일해 physics_version=3, track v2로 상승. 카메라 모드, FPV 인공 수평선, 연습용 높이 보조의 켜짐 여부를 메타데이터와 학습 파티션 키에 추가.
 - 0.1.3 (2026-09-26): M1 마무리 요구사항 반영. 보조 전/후 입력을 런타임에서 동시에 기록하고 control_mode/assist_version을 결합, Easy/Acro 순위·학습 파티션 분리, 카메라에 vertical FOV + aspect ratio + viewport 크기/devicePixelRatio를 함께 기록하도록 명시.
-
 - 0.1.2 (2026-09-26): 사용자의 조작 난이도 피드백으로 쉬운 조종 도입. physics_version=2,
   control_profile, 보조 전 pilot_inputs와 보조 후 inputs를 구분. 학습/랭킹의 모드 분리 규칙 추가.
 - 0.1.1 (2026-09-26): M1 첫 `physics_version=1`과 rates 파라미터 단위를 구체화.
