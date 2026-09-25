@@ -1,3 +1,4 @@
+# Temporary bootstrap: generate the committed lockfile once on GitHub's Linux runner.
 name: Bootstrap package lock
 
 on:
