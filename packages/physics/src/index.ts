@@ -1,5 +1,5 @@
 // Pure fixed-step SI physics: no renderer, DOM, clock or random source.
-export const PHYSICS_VERSION = 2;
+export const PHYSICS_VERSION = 3;
 export const PHYSICS_HZ = 240;
 export const DT = 1 / PHYSICS_HZ;
 export const G = 9.80665;
