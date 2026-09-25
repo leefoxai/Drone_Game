@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/Drone_Game/',
+  base: process.env.VITE_BASE ?? '/',
 });
