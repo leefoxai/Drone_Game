@@ -5,8 +5,10 @@ test('호버 유지, 키보드 상승, 일시정지, 튜닝과 카메라 전환'
   await page.goto('/');const telemetry=page.locator('#telemetry');
   await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
   await expect(telemetry).toHaveAttribute('data-mode','assisted');
-  await expect(telemetry).toHaveAttribute('data-track-id','training-five-v1');
+  await expect(telemetry).toHaveAttribute('data-track-id','training-five-v2');
   await expect(telemetry).toHaveAttribute('data-assist-version','1');
+  await expect(telemetry).toHaveAttribute('data-camera-mode','chase');
+  await expect(telemetry).toHaveAttribute('data-height-assist','true');
   await expect.poll(async()=>Number(await telemetry.getAttribute('data-recorded-samples'))).toBeGreaterThan(0);
   expect(Number(await telemetry.getAttribute('data-pilot-throttle'))).toBe(.5);
   expect(Number(await telemetry.getAttribute('data-applied-throttle'))).not.toBe(.5);
@@ -18,7 +20,11 @@ test('호버 유지, 키보드 상승, 일시정지, 튜닝과 카메라 전환'
   await page.getByRole('button',{name:'일시정지'}).click();
   await expect(telemetry).toHaveAttribute('data-running','false');
   const tick=await telemetry.getAttribute('data-tick');await page.waitForTimeout(250);expect(await telemetry.getAttribute('data-tick')).toBe(tick);
-  await page.getByRole('button',{name:'FPV로 전환'}).click();await expect(page.locator('#camera')).toHaveAttribute('data-mode','fpv');
+  await page.getByRole('button',{name:'FPV로 전환'}).click();
+  await expect(page.locator('#camera')).toHaveAttribute('data-mode','fpv');
+  await expect(telemetry).toHaveAttribute('data-camera-mode','fpv');
+  await expect(telemetry).toHaveAttribute('data-artificial-horizon','true');
+  await expect(page.locator('#fpv-osd')).toBeVisible();
   await page.getByText('카메라 · 기체 튜닝',{exact:true}).click();
   await page.locator('#mass').focus();await page.keyboard.press('ArrowRight');
   await expect(page.locator('#mass-out')).toHaveText('0.63 kg');
@@ -32,7 +38,6 @@ test('가상 게임패드 매핑·보정 저장, 재로딩 복원, 연결 해제
   await page.addInitScript(()=>{
     const device={id:'Test USB Controller',index:0,connected:true,mapping:'',axes:[0,0,0,0],buttons:[],timestamp:0};
     Object.defineProperty(navigator,'getGamepads',{value:()=>device.connected?[device]:[]});
-    // Only tests supply a simulated hardware device; production has no test controls.
     (window as unknown as {testPad:typeof device}).testPad=device;
   });
   await page.goto('/');await page.getByText('조종기 연결 · 축 보정',{exact:true}).click();
@@ -67,20 +72,31 @@ test('키보드 강하 충돌 시 초기 위치로 리셋',async({page})=>{
   expect(Number(await page.locator('#telemetry').getAttribute('data-altitude'))).toBeGreaterThan(2.8);
 });
 
-
-test('Acro 기본 카메라와 대회용 트랙을 선택할 수 있다',async({page})=>{
+test('대회용 Acro에서는 높이 보조가 꺼지고 FPV 수평선은 토글 가능하다',async({page})=>{
   await page.goto('/');const telemetry=page.locator('#telemetry');
   await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
   await page.locator('#flight-mode').selectOption('acro');
   await expect(telemetry).toHaveAttribute('data-mode','acro');
   await expect(telemetry).toHaveAttribute('data-assist-version','none');
   await expect(page.locator('#tilt-out')).toHaveText('27°');
-  await expect(page.locator('#rc-rate-out')).toHaveText('1.00');
-  await expect(page.locator('#super-rate-out')).toHaveText('0.70');
-  await expect(page.locator('#expo-out')).toHaveText('0.00');
-  await page.locator('#track-select').selectOption('race-five-v1');
-  await expect(telemetry).toHaveAttribute('data-track-id','race-five-v1');
+  await page.locator('#track-select').selectOption('race-five-v2');
+  await expect(telemetry).toHaveAttribute('data-track-id','race-five-v2');
   await expect(telemetry).toHaveAttribute('data-gate-count','5');
+  await expect(telemetry).toHaveAttribute('data-height-assist','false');
+  await expect(page.locator('#height-assist')).toBeHidden();
   await expect(page.locator('#track-description')).toContainText('1.8 m');
+  await page.getByRole('button',{name:'FPV로 전환'}).click();
+  await expect(telemetry).toHaveAttribute('data-artificial-horizon','true');
+  await expect(page.locator('#fpv-osd')).toBeVisible();
+  await page.locator('#horizon-toggle').uncheck();
+  await expect(telemetry).toHaveAttribute('data-artificial-horizon','false');
+  await expect(page.locator('#fpv-osd')).toBeHidden();
   await expect(page.locator('#scene')).toHaveAttribute('data-rendered','true');
+});
+
+test('대회용 쉬운 조종에서는 다음 게이트 높이 차가 표시된다',async({page})=>{
+  await page.goto('/');await page.locator('#track-select').selectOption('race-five-v2');
+  await expect(page.locator('#telemetry')).toHaveAttribute('data-height-assist','true');
+  await expect(page.locator('#height-assist')).toBeVisible();
+  await expect(page.locator('#height-assist')).toContainText('다음 게이트');
 });
