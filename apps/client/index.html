@@ -8,9 +8,11 @@
 </head>
 <body>
   <canvas id="scene" aria-label="드론과 다섯 개 게이트가 있는 3D 훈련장"></canvas>
+  <div id="fpv-osd" aria-hidden="true"><div id="artificial-horizon"></div></div>
+  <div id="height-assist" aria-live="polite" hidden>다음 게이트 · 0.0 m</div>
   <header>
     <div><p class="eyebrow">DRONE LAB / FLIGHT 01</p><h1>비행 훈련장</h1></div>
-    <div class="badges"><span id="mode-badge">쉬운 조종</span><span>240 Hz</span><span id="version">PHYSICS 2 / PROFILE 2</span></div>
+    <div class="badges"><span id="mode-badge">쉬운 조종</span><span>240 Hz</span><span id="version">PHYSICS 3 / PROFILE 2</span></div>
     <button id="panel-toggle" aria-expanded="true" aria-controls="controls">설정 접기</button>
   </header>
   <main>
@@ -28,10 +30,15 @@
       <div class="panel-heading"><span class="eyebrow">FLIGHT CONTROLS</span><span class="dot"></span></div>
       <div class="actions"><button id="reset">다시 시작 <kbd>R</kbd></button><button id="pause">일시정지 <kbd>P</kbd></button></div>
       <div class="actions"><button id="camera" data-mode="chase">FPV로 전환 <kbd>C</kbd></button><button id="hover">호버 스로틀 <kbd>H</kbd></button></div>
-      <label>트랙<select id="track-select"><option value="training-five-v1">훈련장 · 큰 게이트</option><option value="race-five-v1">대회용 · 1.8 m 게이트/고도 변화</option></select></label><p class="help" id="track-description">기존 7 m × 5 m 게이트 5개로 구성된 입문용 연습 루프</p>
+      <label>트랙<select id="track-select"><option value="training-five-v2">훈련장 · 큰 게이트</option><option value="race-five-v2">대회용 · 1.8 m 게이트/고도 변화</option></select></label><p class="help" id="track-description">7 m × 5 m 게이트 5개와 지면 지지대가 있는 입문용 연습 루프</p>
       <label>조종 모드<select id="flight-mode"><option value="assisted">쉬운 조종 · 수평/고도/감속 보조</option><option value="acro">Acro · 직접 각속도 조종</option></select></label>
       <label>입력 방식<select id="input-source"><option value="keyboard">키보드 · 테스트용</option><option value="gamepad">USB 조종기 / 게임패드</option></select></label>
       <p class="help" id="control-help">↑↓ 앞뒤 이동 · ←→ 좌우 이동 · A/D 방향 전환<br>W/S 상승/하강 · 손을 놓으면 수평·감속·고도 보조<br>쉬운 조종은 최대 4 m/s의 연습 모드입니다.</p>
+      <details open><summary>시야 · 연습 보조</summary>
+        <label class="check-row"><input id="horizon-toggle" type="checkbox" checked> FPV 인공 수평선</label>
+        <label class="check-row"><input id="height-assist-toggle" type="checkbox" checked> 다음 게이트 높이 차</label>
+        <p class="help" id="assist-help">높이 차는 훈련장 또는 쉬운 조종에서만 표시됩니다. 시야/보조 설정은 학습 데이터 파티션을 분리합니다.</p>
+      </details>
       <details id="input-settings"><summary>조종기 연결 · 축 보정</summary>
         <p class="help">USB 조이스틱 모드로 연결하고 장치 버튼을 한 번 누르세요. 설정 중에는 비행이 멈춥니다.</p>
         <label>장치<select id="device"><option value="">연결된 장치 없음</option></select></label>
