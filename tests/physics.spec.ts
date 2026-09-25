@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
 import profile from '../packages/physics/profiles/racer5.json' with { type: 'json' };
-import { DT, G, hoverThrottle, initialState, rate, rotate, step } from '../packages/physics/src/index';
+import { DT, G, PHYSICS_VERSION, hoverThrottle, initialState, rate, rotate, step } from '../packages/physics/src/index';
 import { FixedClock } from '../packages/physics/src/clock';
-import { GATES, RACE_TRACK, TRAINING_TRACK, collision, gatePassed } from '../packages/physics/src/track';
+import { DRONE_COLLISION_RADIUS_M, GATE_FRAME_THICKNESS_M, GATES, RACE_TRACK, TRAINING_TRACK, collision, gatePassed, gateSolidBoxes } from '../packages/physics/src/track';
+import { DRONE_VISUAL_RADIUS_M } from '../apps/client/src/world';
 import { Race } from '../packages/physics/src/race';
 import type { Vec3 } from '../packages/physics/src/index';
 import { assistedInput } from '../packages/physics/src/assist';
@@ -14,6 +15,18 @@ test('M1 v2 프로파일: 약 10:1 명목 추력대중량비와 Betaflight 기�
   expect(thrustToWeight).toBeLessThanOrEqual(10.5);
   expect(profile.rates).toEqual({rcRate:1,superRate:.7,expo:0});
   expect(rate(1,profile.rates)*180/Math.PI).toBeCloseTo(666.6666667,5);
+});
+
+test('충돌 의미 변경은 physics 3 / track v2이고 시각·충돌 치수가 같은 상수를 쓴다',()=>{
+  expect(PHYSICS_VERSION).toBe(3);
+  expect(TRAINING_TRACK.version).toBe(2);expect(RACE_TRACK.version).toBe(2);
+  expect(TRAINING_TRACK.id).toBe('training-five-v2');expect(RACE_TRACK.id).toBe('race-five-v2');
+  expect(DRONE_VISUAL_RADIUS_M).toBe(DRONE_COLLISION_RADIUS_M);
+  expect(DRONE_COLLISION_RADIUS_M).toBe(.22);expect(GATE_FRAME_THICKNESS_M).toBe(.22);
+  const solids=gateSolidBoxes(RACE_TRACK.gates[0]!);
+  expect(solids.filter(v=>v.kind==='frame')).toHaveLength(4);
+  expect(solids.filter(v=>v.kind==='leg')).toHaveLength(2);
+  for(const box of solids.filter(v=>v.kind==='frame'))expect(box.size.some(v=>v===GATE_FRAME_THICKNESS_M)).toBe(true);
 });
 
 test('호버 스로틀과 10초 고도 유지', () => {
@@ -73,7 +86,7 @@ test('좌표계와 rates 대칭', () => {
   expect(rate(-0.7,profile.rates)).toBeCloseTo(-rate(0.7,profile.rates),12);
   expect(rotate([Math.SQRT1_2,0,0,Math.SQRT1_2],[0,0,-1])[1]).toBeCloseTo(1,10);
 });
-test('기존 훈련장 형상 유지, 대회 트랙은 1.8m 게이트와 높이 변화',()=>{
+test('기존 훈련장 게이트 배치는 유지하고 대회 트랙은 1.8m 게이트와 높이 변화',()=>{
   expect(TRAINING_TRACK.gates).toEqual([
     { id: 1, center: [0, 3, -8], yaw: 0, width: 7, height: 5 },
     { id: 2, center: [14, 3, -20], yaw: -Math.PI/2, width: 7, height: 5 },
@@ -85,7 +98,7 @@ test('기존 훈련장 형상 유지, 대회 트랙은 1.8m 게이트와 높이 
   expect(RACE_TRACK.gates.every(g=>g.width>=1.5&&g.width<=2&&g.height>=1.5&&g.height<=2)).toBe(true);
   expect(new Set(RACE_TRACK.gates.map(g=>g.center[1])).size).toBeGreaterThan(2);
 });
-test('게이트 방향·개구부 및 고속 충돌 판정', () => {
+test('게이트 통과, 프레임과 지지대 충돌을 swept sphere로 판정', () => {
   const g=GATES[0]!;
   expect(gatePassed([0,3,-7],[0,3,-9],g)).toBe(true);
   expect(gatePassed([0,3,-9],[0,3,-7],g)).toBe(false);
@@ -96,6 +109,7 @@ test('게이트 방향·개구부 및 고속 충돌 판정', () => {
   const rg=RACE_TRACK.gates[0]!;
   expect(gatePassed([0,3,-7],[0,3,-9],rg)).toBe(true);
   expect(collision([.9,3,-7],[.9,3,-9],RACE_TRACK)).toBe(true);
+  expect(collision([.9,.7,-7],[.9,.7,-9],RACE_TRACK)).toBe(true);
 });
 
 test('게이트를 순서대로 통과해야 완주, 무효 랩은 해당 파티션 순위에서 제외',()=>{
