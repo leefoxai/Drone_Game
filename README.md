@@ -29,16 +29,7 @@ npx playwright install chromium
 npm test
 ```
 
-`npm test`는 다음을 순서대로 수행합니다.
-
-1. TypeScript 타입 검사
-2. Vite production build
-3. 물리/rates/결정성 테스트
-4. 게이트/충돌/랩 테스트
-5. 입력 장치/deadzone 테스트
-6. Easy pilot/applied 입력 기록 및 데이터 파티션 테스트
-7. 카메라 vertical FOV/aspect ratio 기록 테스트
-8. Playwright 실제 브라우저 호버/조작/트랙 전환 테스트
+`npm test`는 TypeScript 타입 검사, production build, 물리/rates/결정성, 게이트/충돌/랩, 입력 장치, 텔레메트리 파티션, 실제 브라우저 E2E까지 실행합니다.
 
 빌드만 확인하려면:
 
@@ -49,10 +40,33 @@ npm run preview -- --host 127.0.0.1
 
 ## 트랙
 
-- `training-five-v1` — 기존 훈련장. 7 m × 5 m 대형 게이트 5개.
-- `race-five-v1` — 대회용 연습 트랙. 1.8 m × 1.8 m 게이트 5개와 높이 변화.
+- `training-five-v2` — 7 m × 5 m 대형 게이트 5개. 기존 배치는 유지하고 지면 지지대와 높이 단서를 추가했습니다.
+- `race-five-v2` — 1.8 m × 1.8 m 게이트 5개와 높이 변화가 있는 대회용 연습 트랙입니다.
 
-게임 화면의 **트랙** 선택 상자에서 전환합니다.
+트랙 v2에서 게이트 프레임과 지지대는 보이는 형상과 충돌 형상을 같은 데이터에서 생성합니다.
+
+- 게이트 프레임 두께: `0.22 m`
+- 드론 충돌/시각 기준 반경: `0.22 m`
+- 지면까지 이어지는 게이트 다리: 충돌 포함
+- 게이트 아래 바닥 표시
+- 드론/게이트의 실제 directional-light 그림자
+- 높이 0.5 m 콘과 2.0 m 깃발을 스케일 기준물로 배치
+
+충돌 의미가 변경되어 `PHYSICS_VERSION=3`, 두 트랙은 version 2입니다.
+
+## 카메라와 높이 판단
+
+3인칭 추적 카메라는 드론보다 약간 높은 위치로 낮춰 같은 높이의 게이트를 비교하기 쉽게 했습니다.
+
+FPV에서는 **인공 수평선**을 켜거나 끌 수 있습니다. 화면 중앙에 고정된 장식선이 아니라 현재 카메라 자세, FPV tilt, vertical FOV, aspect ratio를 사용해 world horizontal plane을 화면에 투영합니다.
+
+**다음 게이트 높이 차**는 다음 조건에서만 표시됩니다.
+
+- 훈련장: Easy/Acro 모두 사용 가능
+- 대회용 트랙: Easy에서만 사용 가능
+- 대회용 트랙 + Acro: 표시하지 않음
+
+표시는 `▲ 1.2 m`, `▼ 0.8 m`처럼 다음 게이트 중심과 현재 드론의 높이 차를 나타냅니다.
 
 ## 조종 모드
 
@@ -116,20 +130,29 @@ Easy에서는 매 physics tick에 두 입력을 구분합니다.
 - `controlMode`
 - `assistVersion`
 
-Easy/Acro는 랩 순위와 학습용 랩 버퍼를 분리합니다. 파티션 키는 최소 다음을 포함합니다.
+Easy/Acro, 시야와 연습 보조 조건은 같은 학습 데이터로 섞지 않습니다. 파티션 키는 최소 다음을 포함합니다.
 
 ```text
-trackId + controlMode + aircraftProfileVersion + assistVersion
+trackId
++ controlMode
++ aircraftProfileVersion
++ assistVersion
++ cameraMode
++ artificialHorizonEnabled
++ heightAssistEnabled
 ```
 
-카메라 재현을 위해 vertical FOV만 저장하지 않고 다음을 같이 기록합니다.
+카메라 재현을 위해 다음을 함께 기록합니다.
 
 ```text
+cameraMode
 verticalFovRad
 aspectRatio
 viewportWidth
 viewportHeight
 devicePixelRatio
+artificialHorizonEnabled
+heightAssistEnabled
 ```
 
 M1에서는 세션 메모리 수준으로 이 계약을 검증합니다. 파일 저장과 고스트는 M2 범위입니다.
