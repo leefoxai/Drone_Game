@@ -1,1 +1,69 @@
-<!doctype html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101923"><title>드론 시뮬레이터 · 비행 훈련장</title></head><body><canvas id="scene"></canvas><header><div><p class="eyebrow">DRONE LAB / FLIGHT 01</p><h1>비행 훈련장</h1></div><div class="badges"><span id="mode-badge">쉬운 조종</span><span>240 Hz</span><span id="version">PHYSICS 2</span></div><button id="panel-toggle">설정 접기</button></header><main><section class="flight-hud"><div class="lap-card"><span class="eyebrow">TRAINING LOOP · 5 GATES</span><div id="lap-time">00:00.000</div><div id="gate-progress">다음 게이트 1 / 5</div><small id="best-lap">완료한 랩 없음</small></div><div class="telemetry" id="telemetry"><div><small>고도</small><strong id="altitude">3.00 <em>m</em></strong></div><div><small>속도</small><strong id="speed">0.0 <em>m/s</em></strong></div><div><small>스로틀</small><strong id="throttle-value">40 <em>%</em></strong></div><div><small>배터리</small><strong id="battery">24.7 <em>V</em></strong></div></div><p id="flight-message">방향키로 이동 · W/S 상승/하강</p></section><aside id="controls"><div class="actions"><button id="reset">다시 시작 R</button><button id="pause">일시정지 P</button></div><div class="actions"><button id="camera" data-mode="chase">FPV로 전환 C</button><button id="hover">호버 H</button></div><label>조종 모드<select id="flight-mode"><option value="assisted">쉬운 조종</option><option value="acro">Acro</option></select></label><label>입력 방식<select id="input-source"><option value="keyboard">키보드</option><option value="gamepad">게임패드</option></select></label><p id="control-help" class="help">방향키 이동 · W/S 상승/하강 · A/D 회전</p><details id="input-settings"><summary>조종기 설정</summary><select id="device"><option>연결된 장치 없음</option></select><p id="device-message"></p><div id="axis-settings"></div><p id="raw-axes"></p><button id="calibrate-start">보정 시작</button><button id="calibrate-end">보정 완료</button><button id="save-input">저장</button><p id="input-feedback"></p></details><details open><summary>Rates</summary><label>RC rate <output id="rc-rate-out">0.90</output><input id="rc-rate" type="range" min="0.2" max="2" step="0.05" value="0.9"></label><label>Super rate <output id="super-rate-out">0.50</output><input id="super-rate" type="range" min="0" max="0.85" step="0.05" value="0.5"></label><label>Expo <output id="expo-out">0.20</output><input id="expo" type="range" min="0" max="0.8" step="0.05" value="0.2"></label><p id="max-rate">최대 360 °/s</p></details><details><summary>카메라 · 기체</summary><label>FPV 틸트 <output id="tilt-out">15°</output><input id="tilt" type="range" min="0" max="55" value="15"></label><label>FOV <output id="fov-out">75°</output><input id="fov" type="range" min="50" max="110" value="75"></label><label>질량 <output id="mass-out">0.62 kg</output><input id="mass" type="range" min="0.4" max="1" step="0.01" value="0.62"></label><label>추력 <output id="thrust-out">10.0 N</output><input id="thrust" type="range" min="6" max="16" step="0.5" value="10"></label><label>모터 지연 <output id="motor-lag-out">25 ms</output><input id="motor-lag" type="range" min="10" max="80" step="5" value="25"></label></details><p id="status">3D 장면 준비 중</p></aside><section class="bottom-panel"><select id="graph-axis"><option value="2">롤</option><option value="0">피치</option><option value="1">요</option></select><span id="live-rate">0 °/s</span><span id="live-thrust">0 N</span><div class="graphs"><canvas id="rate-graph" width="480" height="90"></canvas><canvas id="thrust-graph" width="480" height="90"></canvas></div></section><canvas id="minimap" width="220" height="160"></canvas></main><script type="module" src="/src/main.ts"></script></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101923" />
+  <title>드론 시뮬레이터 · 비행 훈련장</title>
+</head>
+<body>
+  <canvas id="scene" aria-label="드론과 다섯 개 게이트가 있는 3D 훈련장"></canvas>
+  <header>
+    <div><p class="eyebrow">DRONE LAB / FLIGHT 01</p><h1>비행 훈련장</h1></div>
+    <div class="badges"><span id="mode-badge">쉬운 조종</span><span>240 Hz</span><span id="version">PHYSICS 2 / PROFILE 2</span></div>
+    <button id="panel-toggle" aria-expanded="true" aria-controls="controls">설정 접기</button>
+  </header>
+  <main>
+    <section class="flight-hud" aria-label="비행 정보">
+      <div class="lap-card"><span class="eyebrow" id="track-label">TRAINING LOOP · 5 GATES</span><div id="lap-time">00:00.000</div><div id="gate-progress">다음 게이트 1 / 5</div><small id="best-lap">완료한 랩 없음</small></div>
+      <div class="telemetry" id="telemetry" data-tick="0" data-altitude="3" data-running="true">
+        <div><small>고도</small><strong id="altitude">3.00 <em>m</em></strong></div>
+        <div><small>속도</small><strong id="speed">0.0 <em>m/s</em></strong></div>
+        <div><small>스로틀</small><strong id="throttle-value">40 <em>%</em></strong></div>
+        <div><small>배터리</small><strong id="battery">24.7 <em>V</em></strong></div>
+      </div>
+      <p id="flight-message">쉬운 조종 · 방향키로 이동, 손을 놓으면 감속 · W/S로 상승/하강</p>
+    </section>
+    <aside id="controls" aria-label="조종 및 튜닝 설정">
+      <div class="panel-heading"><span class="eyebrow">FLIGHT CONTROLS</span><span class="dot"></span></div>
+      <div class="actions"><button id="reset">다시 시작 <kbd>R</kbd></button><button id="pause">일시정지 <kbd>P</kbd></button></div>
+      <div class="actions"><button id="camera" data-mode="chase">FPV로 전환 <kbd>C</kbd></button><button id="hover">호버 스로틀 <kbd>H</kbd></button></div>
+      <label>트랙<select id="track-select"><option value="training-five-v1">훈련장 · 큰 게이트</option><option value="race-five-v1">대회용 · 1.8 m 게이트/고도 변화</option></select></label><p class="help" id="track-description">기존 7 m × 5 m 게이트 5개로 구성된 입문용 연습 루프</p>
+      <label>조종 모드<select id="flight-mode"><option value="assisted">쉬운 조종 · 수평/고도/감속 보조</option><option value="acro">Acro · 직접 각속도 조종</option></select></label>
+      <label>입력 방식<select id="input-source"><option value="keyboard">키보드 · 테스트용</option><option value="gamepad">USB 조종기 / 게임패드</option></select></label>
+      <p class="help" id="control-help">↑↓ 앞뒤 이동 · ←→ 좌우 이동 · A/D 방향 전환<br>W/S 상승/하강 · 손을 놓으면 수평·감속·고도 보조<br>쉬운 조종은 최대 4 m/s의 연습 모드입니다.</p>
+      <details id="input-settings"><summary>조종기 연결 · 축 보정</summary>
+        <p class="help">USB 조이스틱 모드로 연결하고 장치 버튼을 한 번 누르세요. 설정 중에는 비행이 멈춥니다.</p>
+        <label>장치<select id="device"><option value="">연결된 장치 없음</option></select></label>
+        <p id="device-message" class="help">Gamepad API 장치를 기다리는 중</p>
+        <div id="axis-settings"></div>
+        <p id="raw-axes" class="mono">축 데이터 없음</p>
+        <div class="actions"><button id="calibrate-start">1. 중립에서 보정 시작</button><button id="calibrate-end">2. 끝점 보정 완료</button></div>
+        <p class="help">회전 축을 중립에 둔 뒤 시작 → 모든 스틱을 끝까지 이동 → 완료 → 저장. 스로틀은 전체 범위를 0~100%로 사용합니다.</p>
+        <button id="save-input">장치별 설정 저장</button><p id="input-feedback" class="help" aria-live="polite"></p>
+      </details>
+      <details open><summary>Rates · 회전 반응</summary>
+        <label>RC rate <output id="rc-rate-out">1.00</output><input id="rc-rate" type="range" min="0.2" max="2" step="0.05" value="1"></label>
+        <label>Super rate <output id="super-rate-out">0.70</output><input id="super-rate" type="range" min="0" max="0.85" step="0.05" value="0.7"></label>
+        <label>Expo <output id="expo-out">0.00</output><input id="expo" type="range" min="0" max="0.8" step="0.05" value="0"></label>
+        <p class="help" id="max-rate">최대 667 °/s · 세 축 공통</p>
+      </details>
+      <details><summary>카메라 · 기체 튜닝</summary>
+        <label>FPV 틸트 <output id="tilt-out">15°</output><input id="tilt" type="range" min="0" max="55" step="1" value="15"></label>
+        <label>수직 FOV <output id="fov-out">75°</output><input id="fov" type="range" min="50" max="110" step="1" value="75"></label>
+        <label>질량 <output id="mass-out">0.62 kg</output><input id="mass" type="range" min="0.4" max="1" step="0.01" value="0.62"></label>
+        <label>모터당 최대 추력 <output id="thrust-out">15.2 N</output><input id="thrust" type="range" min="6" max="24" step="0.1" value="15.2"></label>
+        <label>모터 응답 시간 <output id="motor-lag-out">25 ms</output><input id="motor-lag" type="range" min="10" max="80" step="5" value="25"></label>
+        <p class="help">물리·rates 변경은 즉시 적용되며 진행 중 랩은 무효입니다. 개발용 근사 기체, 실측 모델이 아닙니다.</p>
+      </details>
+      <p id="status" role="status">3D 장면 준비 중</p>
+    </aside>
+    <section class="bottom-panel" aria-label="디버그 그래프">
+      <div class="graph-title"><span>비행 진단 · 최근 6초</span><select id="graph-axis" aria-label="그래프 회전축"><option value="2">롤</option><option value="0">피치</option><option value="1">요</option></select><span id="live-rate" class="mono">0 °/s</span></div>
+      <div class="graphs"><div><small><i class="cyan"></i>적용 목표 <i class="orange"></i>실제 각속도 (°/s)</small><canvas id="rate-graph" width="480" height="90" aria-label="목표와 실제 각속도 그래프"></canvas></div><div><small><i class="cyan"></i>스로틀 % <i class="orange"></i>추력 % <span id="live-thrust">0 N</span></small><canvas id="thrust-graph" width="480" height="90" aria-label="스로틀과 최대 대비 추력 그래프"></canvas></div></div>
+    </section>
+    <canvas id="minimap" width="220" height="160" aria-label="게이트 순서와 드론 위치 지도"></canvas>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
