@@ -1,6 +1,7 @@
 import type { Input } from './index';
 
 export type ControlMode = 'assisted' | 'acro';
+export type CameraMode = 'chase' | 'fpv';
 
 export interface CameraSnapshot {
   verticalFovRad: number;
@@ -8,12 +9,18 @@ export interface CameraSnapshot {
   viewportWidth: number;
   viewportHeight: number;
   devicePixelRatio: number;
+  cameraMode: CameraMode;
+  artificialHorizonEnabled: boolean;
+  heightAssistEnabled: boolean;
 }
 export interface ControlContext {
   trackId: string;
   controlMode: ControlMode;
   aircraftProfileVersion: number;
   assistVersion: number | null;
+  cameraMode: CameraMode;
+  artificialHorizonEnabled: boolean;
+  heightAssistEnabled: boolean;
 }
 export interface InputRecord {
   tick: number;
@@ -32,16 +39,33 @@ export interface LapRecord extends ControlContext {
 }
 
 export function dataPartitionKey(context:ControlContext):string {
-  return [context.trackId,context.controlMode,`profile-${context.aircraftProfileVersion}`,`assist-${context.assistVersion ?? 'none'}`].join('|');
+  return [
+    context.trackId,
+    context.controlMode,
+    `profile-${context.aircraftProfileVersion}`,
+    `assist-${context.assistVersion ?? 'none'}`,
+    `camera-${context.cameraMode}`,
+    `horizon-${context.artificialHorizonEnabled?'on':'off'}`,
+    `height-assist-${context.heightAssistEnabled?'on':'off'}`,
+  ].join('|');
 }
-export function cameraSnapshot(verticalFovDeg:number,viewportWidth:number,viewportHeight:number,devicePixelRatio=1):CameraSnapshot {
+export function cameraSnapshot(
+  verticalFovDeg:number,
+  viewportWidth:number,
+  viewportHeight:number,
+  devicePixelRatio=1,
+  cameraMode:CameraMode='chase',
+  artificialHorizonEnabled=false,
+  heightAssistEnabled=false,
+):CameraSnapshot {
   if(!Number.isFinite(verticalFovDeg)||verticalFovDeg<=0)throw new Error('Invalid vertical FOV');
   if(!Number.isFinite(viewportWidth)||!Number.isFinite(viewportHeight)||viewportWidth<=0||viewportHeight<=0)throw new Error('Invalid viewport');
-  return {verticalFovRad:verticalFovDeg*Math.PI/180,aspectRatio:viewportWidth/viewportHeight,viewportWidth,viewportHeight,devicePixelRatio};
+  return {verticalFovRad:verticalFovDeg*Math.PI/180,aspectRatio:viewportWidth/viewportHeight,viewportWidth,viewportHeight,devicePixelRatio,cameraMode,artificialHorizonEnabled,heightAssistEnabled};
 }
 function sameCamera(a:CameraSnapshot|undefined,b:CameraSnapshot):boolean {
   return !!a && a.verticalFovRad===b.verticalFovRad && a.aspectRatio===b.aspectRatio
-    && a.viewportWidth===b.viewportWidth && a.viewportHeight===b.viewportHeight && a.devicePixelRatio===b.devicePixelRatio;
+    && a.viewportWidth===b.viewportWidth && a.viewportHeight===b.viewportHeight && a.devicePixelRatio===b.devicePixelRatio
+    && a.cameraMode===b.cameraMode && a.artificialHorizonEnabled===b.artificialHorizonEnabled && a.heightAssistEnabled===b.heightAssistEnabled;
 }
 export class LapTelemetryBuffer {
   private inputs:InputRecord[]=[];
