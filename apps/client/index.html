@@ -10,8 +10,9 @@
   <canvas id="scene" aria-label="드론과 다섯 개 게이트가 있는 3D 훈련장"></canvas>
   <div id="fpv-osd" aria-hidden="true"><div id="artificial-horizon"></div></div>
   <div id="height-assist" aria-live="polite" hidden>다음 게이트 · 0.0 m</div>
+  <div id="ghost-status" hidden>GHOST · <span id="ghost-mode-label">STATE</span> · Δ <span id="ghost-error">0.000 m</span> / MAX <span id="ghost-max-error">0.000 m</span></div>
   <header>
-    <div><p class="eyebrow">DRONE LAB / FLIGHT 01</p><h1>비행 훈련장</h1></div>
+    <div><p class="eyebrow">DRONE LAB / FLIGHT 02</p><h1>비행 훈련장</h1></div>
     <div class="badges"><span id="tester-badge" hidden>FPV TESTER MODE</span><span id="mode-badge">쉬운 조종</span><span>240 Hz</span><span id="version">PHYSICS 3 / PROFILE 2</span></div>
     <button id="panel-toggle" aria-expanded="true" aria-controls="controls">설정 접기</button>
   </header>
@@ -38,6 +39,12 @@
         <label class="check-row"><input id="horizon-toggle" type="checkbox" checked> FPV 인공 수평선</label>
         <label class="check-row"><input id="height-assist-toggle" type="checkbox" checked> 다음 게이트 높이 차</label>
         <p class="help" id="assist-help">높이 차는 훈련장 또는 쉬운 조종에서만 표시됩니다. 시야/보조 설정은 학습 데이터 파티션을 분리합니다.</p>
+      </details>
+      <details open><summary>내 기록 · 고스트</summary>
+        <label>고스트 방식<select id="ghost-mode"><option value="state">기록된 상태 재생</option><option value="resim">입력 재시뮬레이션</option></select></label>
+        <div class="actions"><button id="ghost-best">현재 조건 최고랩</button><button id="ghost-off">고스트 끄기</button></div>
+        <p class="help" id="recording-help">완주·중단·충돌 기록은 IndexedDB에 보존됩니다. 최고랩 고스트는 같은 파티션의 유효 완주만 사용합니다.</p>
+        <div id="recording-list" aria-live="polite"></div>
       </details>
       <details id="input-settings" data-tester-control><summary>조종기 연결 · 축 보정</summary>
         <p class="help">USB 조이스틱 모드로 연결하고 장치 버튼을 한 번 누르세요. 설정 중에는 비행이 멈춥니다.</p>
