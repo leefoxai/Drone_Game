@@ -3,7 +3,8 @@ import { test, expect } from '@playwright/test';
 test('IndexedDB 기록은 새로고침 후 남고 현재 조건 최고랩 고스트로 재생된다',async({page})=>{
   await page.goto('/');await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
   await page.evaluate(async()=>{
-    const {saveRecording,clearRecordingsForTests}=await import('/src/recording-store.ts');
+    const modulePath='/src/recording-store.ts';
+    const {saveRecording,clearRecordingsForTests}=await import(modulePath);
     await clearRecordingsForTests();
     const state={tick:0,position:[0,3,6],velocity:[0,0,0],orientation:[0,0,0,1],omega:[0,0,0],integral:[0,0,0],previousOmega:[0,0,0],derivative:[0,0,0],motors:[.2,.2,.2,.2],charge:1,voltage:25.2,thrustN:6,targetOmega:[0,0,0],acceleration:[0,0,0]};
     const metadata={
