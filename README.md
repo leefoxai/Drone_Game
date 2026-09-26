@@ -1,174 +1,127 @@
-# Drone Game · M1 Flight Prototype
+# Drone Game · M2 Recording & Ghost
 
-브라우저에서 실행되는 FPV 드론 게임/데이터 수집 시뮬레이터입니다.
-M1 비행 프로토타입은 완료되었고, 현재 공개 제품은 **키보드 + 쉬운 조종(Easy)** 만 노출합니다.
-Acro, Gamepad/RC 조종기, 축 보정, Rates UI는 코드와 테스트를 그대로 유지하되 테스터 플래그 뒤에 둡니다.
+브라우저에서 실행되는 FPV 드론 게임/데이터 수집 시뮬레이터입니다. M1 비행 프로토타입은 완료되었고 M2에서 **랩 원본 기록, IndexedDB 영속 저장, gzip JSON Lines 내보내기, 최고랩 고스트와 입력 재시뮬레이션 검증**을 구현했습니다.
 
-## 현재 공개 방식
-
-기본 주소:
-
-```text
-https://leefoxai.github.io/Drone_Game/
-```
-
-공개 화면에서는 다음만 사용할 수 있습니다.
-
-- 키보드 입력
-- Easy / 쉬운 조종
-- 훈련장 `training-five-v2`
-- 대회용 트랙 `race-five-v2`
-- 3인칭 / FPV
-- 인공 수평선과 연습용 높이 차 보조
-
-FPV 테스터 주소:
-
-```text
-https://leefoxai.github.io/Drone_Game/?tester=1
-```
-
-`?tester=1`에서는 다음 기능이 추가로 열립니다.
-
-- Acro
-- 표준 Gamepad
-- 비표준 USB RC 조이스틱
-- 축 매핑/반전/끝점/데드존 보정
-- Rates 설정
-
-`?tester=1`은 인증이나 접근 통제가 아니라 제품 기능 플래그입니다. 주소를 아는 사용자는 활성화할 수 있습니다.
-테스터 모드 랩은 원본/학습용으로 보존할 수 있지만 향후 공개 순위 대상에서는 제외합니다.
+현재 공개 제품은 **키보드 + 쉬운 조종(Easy)** 만 노출합니다. Acro, Gamepad/RC 조종기, 축 보정, Rates UI는 코드와 테스트를 유지한 채 `?tester=1`에서만 활성화됩니다.
 
 ## 실행
 
-Node.js 22.12 이상이 필요합니다.
+Node.js 22.12 이상:
 
 ```bash
 npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-기본 개발 주소는 `http://127.0.0.1:5173/`입니다.
-로컬 테스터 모드는 `http://127.0.0.1:5173/?tester=1`로 확인합니다.
+- 공개 모드: `http://127.0.0.1:5173/`
+- FPV tester: `http://127.0.0.1:5173/?tester=1`
+- 배포: `https://leefoxai.github.io/Drone_Game/`
 
-## 전체 테스트
+`?tester=1`은 인증이 아니라 기능 플래그입니다. tester 랩은 원본/학습 용도로 보존할 수 있지만 향후 공개 순위 대상에서는 제외합니다.
 
-최초 한 번 Chromium을 설치합니다.
+## M2 기록
 
-```bash
-npx playwright install chromium
+조작이 시작되면 랩 recorder가 시작됩니다. complete뿐 아니라 collision/중단 기록도 원본 보존을 위해 IndexedDB에 저장할 수 있습니다.
+
+### 매 rAF frame
+
+- keyboard: 눌린 key code 배열 + normalized pilot input
+- gamepad/RC: raw axes/buttons + normalized pilot input
+- 입력을 읽은 monotonic timestamp
+- `requestAnimationFrame` timestamp
+- 현재 simulation tick과 physics interpolation alpha
+
+### 매 physics tick
+
+- `pilotInput`: assist 전 사람 명령
+- `appliedInput`: 실제 `step()`에 전달된 입력
+- Easy `assistTargets`
+- rigid-body state
+- PID 적분기/필터/모터/배터리 등 재시뮬레이션에 필요한 controller hidden state
+
+### 이벤트
+
+- lap start
+- gate pass
+- collision
+- lap complete
+- lap abort
+
+기준 스키마는 `docs/data_spec.md` **0.1.6**입니다. 기존 M1 `telemetry.ts`의 partition/training-use 규칙을 그대로 사용하며 별도의 학습 분류 체계를 만들지 않습니다.
+
+## 로컬 저장
+
+랩 파일은 `localStorage`가 아니라 IndexedDB에 저장합니다.
+
+```text
+DB: drone-recordings
+Store: laps
 ```
 
-그 다음 전체 검증은 한 명령으로 실행합니다.
+실제 원본은 한 랩당 gzip JSON Lines 하나입니다.
 
-```bash
-npm test
+```text
+lap_<recording_id>.jsonl.gz
 ```
 
-`npm test`는 다음을 함께 검증합니다.
+첫 line은 metadata이고 이후 `frames`, `inputs`, `states`, `controller_states`, `events`, `camera_changes` 논리 채널이 `channel` 태그로 들어갑니다. `channel`은 기존 data_spec 채널을 한 gzip 파일에 multiplexing하기 위한 컨테이너 태그입니다.
 
-- 물리/rates/결정성
-- 게이트/충돌/랩
-- keyboard / gamepad / rc_joystick 입력 처리
-- 공개 모드에서 Easy + keyboard 강제
-- `?tester=1`에서 기존 Acro/조종기 기능 복원
-- 텔레메트리 파티션
-- `training_use` 분류와 학습 내보내기 차단 규칙
-- Easy 속도 목표값 기록
-- 실제 브라우저 E2E
+화면의 **내 기록 · 고스트**에서 다음을 할 수 있습니다.
 
-빌드만 확인하려면:
+- 기록 목록 확인
+- 기록을 고스트로 재생
+- `.jsonl.gz` 원본 내보내기
+- 로컬 기록 삭제
+
+## 고스트
+
+**현재 조건 최고랩**은 현재 `partitionKey`와 완전히 같은 유효 complete 랩 중 최저 시간을 선택합니다. 따라서 physics version, input device, Easy/Acro, 카메라/보조, tester 조건이 다른 기록을 섞지 않습니다.
+
+두 재생 방식을 지원합니다.
+
+1. **기록된 상태 재생**: 저장된 state를 반투명 드론으로 재생
+2. **입력 재시뮬레이션**: 저장된 `initialState + appliedInput[]`을 shared physics로 다시 계산
+
+Easy 기록을 재시뮬레이션할 때 assist를 다시 적용하지 않습니다. 화면에는 기록 state와 재시뮬레이션 state 사이의 현재/최대 position error를 표시합니다.
+
+현재 `physicsVersion=3` 재시뮬레이션을 지원합니다. 지원하지 않는 구버전 기록을 최신 물리로 조용히 계산하지 않습니다.
+
+## 기록 검증
+
+내보낸 파일은 Python 표준 라이브러리만 사용하는 validator로 검사합니다.
 
 ```bash
-npm run build
-npm run preview -- --host 127.0.0.1
+python3 tools/validate.py lap_<recording_id>.jsonl.gz
 ```
 
-## 트랙
+검사 항목에는 gzip/JSONL, 필수 metadata, SHA-256, N input ↔ N+1 state, tick 연속성, Easy assist target, raw frame input, events, partition key, training_use, tester/public 순위 정책이 포함됩니다.
 
-- `training-five-v2` — 7 m × 5 m 대형 게이트 5개
-- `race-five-v2` — 1.8 m × 1.8 m 게이트 5개와 높이 변화
+`npm test`에서는 deterministic sample lap 3개를 실제 `.jsonl.gz`로 만들고 validator를 실행한 뒤 authoritative input으로 재시뮬레이션합니다.
 
-트랙 v2에서 게이트 프레임과 지지대는 보이는 형상과 충돌 형상을 같은 데이터에서 생성합니다.
+현재 회귀 허용 오차:
 
-- 게이트 프레임 두께: `0.22 m`
-- 드론 충돌/시각 기준 반경: `0.22 m`
-- 지면까지 이어지는 게이트 다리: 충돌 포함
-- 게이트 아래 바닥 표시
-- 드론/게이트의 실제 directional-light 그림자
-- 0.5 m 콘, 2.0 m 깃발을 세계 크기 단서로 배치
+```text
+position <= 1e-9 m
+velocity <= 1e-9 m/s
+orientation <= 1e-10
+angular velocity <= 1e-9 rad/s
+```
 
-충돌 의미 변경으로 `PHYSICS_VERSION=3`, 두 트랙은 version 2입니다.
+## 예상 기록 크기
 
-## 카메라와 높이 판단
+JSONL은 가독성과 검증 편의성을 우선한 M2 형식입니다.
 
-3인칭 카메라는 드론 높이 가까이 배치해 같은 고도의 게이트를 비교하기 쉽게 했습니다.
-FPV 인공 수평선은 카메라 자세, FPV tilt, vertical FOV, aspect ratio를 이용해 실제 world horizon을 화면에 투영합니다.
+| 랩 | 비압축 예상 | gzip 예상 |
+|---:|---:|---:|
+| 30초 | 7–10 MB | 1.5–3.5 MB |
+| 60초 | 14–20 MB | 3–7 MB |
+| 90초 | 21–30 MB | 4.5–10 MB |
 
-다음 게이트 높이 차는 다음 조건에서 표시됩니다.
+실제 장시간 랩의 브라우저별 용량/CPU/IndexedDB quota 측정은 M3에서 다시 수행합니다.
 
-- 훈련장: Easy/Acro
-- 대회용: Easy
-- 대회용 + Acro: 미표시
+## 학습 용도
 
-현재 일반 공개 버전은 Easy만 노출하므로 두 트랙에서 높이 차 보조를 사용할 수 있습니다.
-
-## 조종
-
-### 공개: Easy + Keyboard
-
-`assist.ts`가 사람 입력을 속도/수평 보조 명령으로 변환한 뒤 동일한 6-DoF 물리에 넣습니다.
-Easy 기본 FPV tilt는 15°입니다.
-
-| 키 | 기능 |
-|---|---|
-| ↑ / ↓ | 앞 / 뒤 이동 |
-| ← / → | 좌 / 우 이동 |
-| A / D | 방향 전환 |
-| W / S | 상승 / 하강 |
-| H | 호버 기준 |
-| C | FPV / 3인칭 |
-| P | 일시정지 |
-| R | 리셋 |
-
-### Tester: Acro + Gamepad/RC
-
-Betaflight식 기본 rates:
-
-- RC rate 1.0
-- Super rate 0.7
-- Expo 0
-- full stick 약 667°/s
-- Acro FPV tilt 27°
-
-장치 기본 deadzone:
-
-- `rc_joystick`: 1%
-- `gamepad`: 5%
-
-## M1 기체 프로파일 v2
-
-`packages/physics/profiles/racer5.json`
-
-- mass: 0.62 kg
-- max motor thrust: 15.2 N / motor
-- 명목 full-voltage/zero-sag T/W: `4 × 15.2 / (0.62 × 9.80665) ≈ 10.0`
-
-이는 M1 시뮬레이터 설계값이며 실측 기체 성능값이 아닙니다.
-
-## 텔레메트리와 학습 용도
-
-원본 랩 데이터는 학습 용도와 관계없이 보존합니다.
-`trainingUse`는 원본 삭제 기준이 아니라 용도 라벨입니다.
-
-Easy에서는 매 physics tick에 다음을 기록합니다.
-
-- `pilotInput`: 사람이 넣은 입력
-- `appliedInput`: assist 후 실제 물리 입력
-- `assistTargets.horizontalVelocityWorldMps`
-- `assistTargets.verticalVelocityMps`
-- `assistTargets.yawRateRadPerSec`
-
-학습 용도는 `classifyTrainingUse()` 하나에서 자동 판정합니다.
+원본은 `trainingUse`와 관계없이 보존합니다.
 
 ```text
 stick_pattern
@@ -181,16 +134,9 @@ flight_method
 = 그 밖의 모든 유효 랩
 ```
 
-따라서 다음은 `flight_method`입니다.
+따라서 keyboard + Easy, keyboard + Acro, gamepad/RC + Easy는 `flight_method`입니다. `stick_pattern` 내보내기는 동일 분류 함수를 다시 적용해 `flight_method` 유입을 차단합니다.
 
-- keyboard + Easy
-- keyboard + Acro
-- gamepad + Easy
-- rc_joystick + Easy
-
-`stick_pattern` 내보내기는 `flight_method` 랩을 강제로 제외합니다.
-
-학습/세션 파티션 키에는 최소 다음이 포함됩니다.
+학습/비교 파티션:
 
 ```text
 trackId
@@ -205,32 +151,72 @@ trackId
 + testerMode
 ```
 
-카메라 재현을 위해 vertical FOV, aspect ratio, viewport 크기, devicePixelRatio도 기록합니다.
-기록 스키마 기준은 `docs/data_spec.md`의 `0.1.5`입니다.
+M2 consent metadata의 기본값은 미동의입니다. 로컬 원본 저장과 향후 학습 데이터셋 사용 동의는 별개입니다.
 
-## GitHub Pages
+## 조종
 
-GitHub Actions는 다음 순서로 배포합니다.
+### 공개: Easy + Keyboard
+
+| 키 | 기능 |
+|---|---|
+| ↑ / ↓ | 앞 / 뒤 이동 |
+| ← / → | 좌 / 우 이동 |
+| A / D | 방향 전환 |
+| W / S | 상승 / 하강 |
+| H | 호버 기준 |
+| C | FPV / 3인칭 |
+| P | 일시정지 |
+| R | 리셋 |
+
+### Tester
+
+`?tester=1`에서 Acro, 표준 Gamepad, RC joystick, calibration, rates를 사용할 수 있습니다.
+
+- Betaflight: RC rate 1.0 / Super rate 0.7 / Expo 0 / full stick 약 667°/s
+- RC joystick 기본 deadzone 1%
+- 표준 gamepad 기본 deadzone 5%
+
+## 물리/트랙 버전
+
+- `PHYSICS_VERSION=3`
+- racer5 profile version 2
+- `training-five-v2`
+- `race-five-v2`
+- `ASSIST_VERSION=1`
+- recording schema `0.1.6`
+
+## 테스트와 배포
+
+```bash
+npx playwright install chromium
+npm test
+```
+
+`npm test`는 M1 물리/입력/공개·tester E2E와 함께 M2 recording codec, Python validator, 3개 재시뮬레이션 fixture, IndexedDB persistence, ghost UI를 검사합니다.
+
+GitHub Actions 순서:
 
 ```text
 npm ci
 → Playwright Chromium 설치
 → npm test
-→ VITE_BASE=/Drone_Game/ npm run build
+→ production build
 → GitHub Pages deploy
 ```
 
-테스트가 하나라도 실패하면 배포되지 않습니다.
+테스트 실패 시 배포하지 않습니다.
 
 ## 구조
 
 ```text
-apps/client/       Three.js 게임 클라이언트
-apps/server/       M4 서버 자리
-packages/physics/  고정 240 Hz 물리, assist, track, race, telemetry contract
-packages/physics/profiles/  기체 프로파일
-tests/             물리·입력·텔레메트리·브라우저 테스트
-docs/              로드맵, 상태, 데이터 명세, 개발 프롬프트
+apps/client/src/recording.ts          M2 랩 기록 계약/재시뮬레이션
+apps/client/src/recording-codec.ts    JSONL + gzip + payload SHA-256
+apps/client/src/recording-store.ts    IndexedDB
+apps/client/src/recording-manager.ts  목록/재생/내보내기/삭제 UI
+apps/client/src/ghost.ts              state/resim ghost
+packages/physics/src/telemetry.ts     M1/M2 partition + training_use 기준
+tools/validate.py                     export validator
+tests/recording.spec.ts               3개 deterministic recording regression
+tests/storage-ghost.spec.ts           IndexedDB + ghost E2E
+docs/data_spec.md                     기록 계약의 기준
 ```
-
-현재 개발 상태는 `docs/STATUS.md`, 향후 단계는 `docs/ROADMAP.md`를 기준으로 합니다.
