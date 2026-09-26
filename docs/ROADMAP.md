@@ -5,137 +5,162 @@
 
 기록의 원본은 입력·상태·이벤트 로그이며 영상은 로그를 재생해 생성한다.
 한 번에 한 기능씩 구현하고, 각 단계의 실행 결과를 직접 확인한 후 다음 단계로 간다.
-M0 준비 완료. M1 비행 프로토타입 및 안정화 완료. M2~M8은 아직 시작하지 않았다.
-현재 공개 제품은 keyboard + Easy만 노출하고, Acro/Gamepad/RC 조종기/Rates/보정은 `?tester=1`에서만 활성화한다.
 
-## M0 · 프로젝트 준비
+현재 상태:
 
-- Git, 무시할 파일 목록, npm 워크스페이스, TypeScript/Vite/Three.js 개발 환경.
-- 지정된 폴더, 데이터 명세 초안, 이 로드맵, 상태 문서.
-- 바닥 격자와 좌표축만 있는 빈 장면.
+- M0 완료
+- M1 완료
+- **M2 구현 및 자동 검증 완료, 배포 사이트 사용자 직접 확인 대기**
+- M3~M8 미시작
+- 공개 제품은 keyboard + Easy. Acro/Gamepad/RC/Rates/보정은 `?tester=1` 전용
+
+## M0 · 프로젝트 준비 — 완료
+
+Git, npm workspace, TypeScript/Vite/Three.js, 기본 문서와 프로젝트 뼈대를 구성했다.
 
 ## M1 · 비행 프로토타입 — 완료
 
-드론 1대, 대형 게이트 훈련장과 실제 크기(약 1.8 m)·고도 변화가 있는 대회용 트랙, Easy/Acro, 조종기·게임패드 입력, 튜닝 패널, 디버그 그래프를 구현했다.
-물리는 `packages/physics`에만 두고 고정 스텝·SI 단위를 유지한다.
-게이트/드론 시각 크기와 충돌 의미를 맞추고, 그림자·게이트 다리·스케일 기준물·낮춘 3인칭 카메라·FPV 인공 수평선으로 높이 판단을 보강했다.
-자동 테스트, GitHub Actions 배포 게이트, GitHub Pages 배포와 사용자 직접 확인까지 완료했다.
+드론 1대, 대형 게이트 훈련장과 실제 크기·고도 변화가 있는 대회용 트랙, Easy/Acro, Gamepad/RC 입력, 튜닝 패널과 고정 240 Hz shared physics를 구현했다.
 
-제품 공개 정책은 M1 코드를 삭제하지 않고 다음처럼 분리한다.
+M1 안정화에서:
 
-- 기본 URL: keyboard + Easy
-- `?tester=1`: Acro + gamepad + rc_joystick + 보정 + Rates
-- tester 랩은 원본/학습용으로 보존 가능하지만 향후 공개 순위에서는 제외
+- 보이는 게이트/드론 크기와 충돌 의미 정합화
+- 게이트 다리/그림자/크기 기준물
+- 낮춘 chase camera / FPV 인공 수평선 / 높이 차 보조
+- 공개 keyboard+Easy / tester Acro+외부입력 분리
+- partition key와 `training_use` 계약 확정
+- GitHub Actions test gate와 Pages 배포
 
-학습 데이터는 원본을 모두 보존하면서 `training_use`로 구분한다.
-
-- `stick_pattern`: gamepad/rc_joystick + Acro + 사람 입력이 그대로 물리에 적용된 랩
-- `flight_method`: 그 밖의 모든 유효 랩
+를 완료했다.
 
 ## Acro 공개 · 조건부 마일스톤
 
-M2 이후 개발과 병행할 수 있으며, 이 마일스톤이 끝나기 전까지 Acro와 외부 입력 장치는 `?tester=1` 전용으로 유지한다.
+M2 이후와 병행하며 완료 전까지 Acro와 외부 입력 장치는 `?tester=1` 전용이다.
 
-공개 전 확인 조건:
+공개 전 조건:
 
-1. 실제 FPV 조종자 여러 명이 RC 조이스틱으로 테스트한다.
-2. 대표 Gamepad/RC 장치에서 축 매핑·끝점·반전·deadzone 호환성을 확인한다.
-3. Acro rates와 FPV tilt의 조작감을 확인하고 공개 기본값을 확정한다.
-4. 보정 UI에서 잘못된 축/중립/끝점이 안전하게 거부되는지 확인한다.
-5. `stick_pattern` 학습 데이터가 keyboard/Easy 데이터와 섞이지 않는지 검증한다.
-6. tester 기록이 공개 순위에서 제외되는 서버 정책을 M4 리더보드에 반영한다.
-7. 공개 전 `npm test`와 실제 배포 E2E를 다시 통과한다.
+1. 실제 FPV 조종자 여러 명의 RC joystick 테스트
+2. 대표 Gamepad/RC의 축 매핑·끝점·반전·deadzone 호환성 확인
+3. Acro rates / FPV tilt 공개 기본값 확정
+4. 잘못된 축/중립/끝점 보정 거부 확인
+5. `stick_pattern`과 keyboard/Easy 데이터 격리 확인
+6. M4 서버에서 tester 기록 공개 순위 제외
+7. 공개 전 전체 `npm test` + 실제 배포 확인
 
-조건을 만족한 뒤 기능 플래그 기본값을 변경해 Acro를 공개한다. 기존 tester URL은 회귀·실험 기능용으로 재정의할 수 있다.
+## M2 · 기록·고스트 — 구현 완료 / 사용자 확인 대기
 
-## M2 · 기록·고스트
+M1 `telemetry.ts`와 `data_spec` 계약을 그대로 확장했다. 별도 학습 기록 형식은 만들지 않는다. schema는 **0.1.6**이다.
 
-입력·상태·이벤트를 기록하고 로컬에 저장한다. 고스트는 상태를 재생하며 검증은 입력으로 다시 계산한다.
-재시뮬레이션 회귀 테스트에 고정 시드, 초기 상태, 물리 버전과 수치 오차 기준을 포함한다.
-M1 `telemetry.ts`와 `data_spec` 계약을 확장해서 사용하며 별도 형식을 새로 만들지 않는다.
+구현:
 
-**내가 직접 확인하는 방법**
-1. 한 랩을 주행하고 기록을 저장한 뒤 새로고침해 목록에 남는지 확인한다.
-2. 저장한 고스트와 다시 주행하며 출발·게이트 통과·완주 시점이 맞는지 비교한다.
-3. 기록을 내보내고 다시 가져와 같은 결과로 재생되는지 확인한다.
-4. 원본 입력으로 재시뮬레이션해 매 tick 상태 및 완주 결과가 지정 오차 안에서 일치하는지 확인한다.
-5. tick 누락·잘못된 버전·손상된 기록은 명확한 사유로 거부되는지 확인한다.
-6. 원본 랩은 training_use와 관계없이 보존되고, stick_pattern 내보내기에 flight_method가 들어가지 않는지 확인한다.
+- 매 rAF frame: key state 또는 joystick raw+normalized input, input-read time, rAF timestamp, simulation tick/alpha
+- 매 physics tick: pilot/applied input, Easy assist target, full state, controller hidden state
+- gate/collision/complete/abort event
+- data_spec 필수 metadata와 snapshot/payload SHA-256
+- 한 랩 단위 `.jsonl.gz`
+- IndexedDB 영속 저장
+- 로컬 기록 목록 / replay / export / delete
+- 현재 partition의 personal-best ghost
+- recorded-state replay와 authoritative-input re-simulation
+- 두 경로의 현재/최대 position error 표시
+- `tools/validate.py`
+- deterministic sample lap 3개 gzip round-trip + validator + re-simulation regression
+
+자동 회귀 허용 오차:
+
+```text
+position <= 1e-9 m
+velocity <= 1e-9 m/s
+orientation <= 1e-10
+angular velocity <= 1e-9 rad/s
+```
+
+**사용자가 직접 확인할 완료 게이트**
+
+1. 배포 사이트에서 한 랩을 완주하고 기록 목록에 생성되는지 확인한다.
+2. 새로고침 후 IndexedDB 기록이 유지되는지 확인한다.
+3. 같은 조건 최고랩 ghost를 불러와 실제로 함께 주행한다.
+4. state / resim ghost를 전환하고 position error 표시를 확인한다.
+5. 기록을 `.jsonl.gz`로 내보낸다.
+6. 내보낸 파일에 `python3 tools/validate.py <file>`을 실행해 통과한다.
+
+위 6개를 사용자가 확인하면 M2를 최종 완료로 닫는다.
 
 ## M3 · 파이프라인 시험과 기록 형식 확정
 
-자신의 기록 몇 랩으로 FPV 영상 리렌더 → 입력/영상 정렬 → 작은 BC(사람의 행동을 따라 배우는 모델) 학습 → 봇 추론까지 한 번 끝까지 수행한다. 이 단계는 대량 수집 전에 반드시 거친다.
-Python/PyTorch CPU 환경을 구성하고 영상 관측으로 다음 조종 입력을 예측하는 최소 실험을 한다.
-깊이·분할·게이트 코너는 소량 샘플로 좌표와 시간 정렬을 먼저 검증한다.
+자신의 동의된 기록 몇 랩으로 FPV 영상 리렌더 → 입력/영상 정렬 → 작은 BC 학습 → 봇 추론까지 한 번 끝까지 수행한다. 대량 수집 전에 반드시 거친다.
 
-**내가 직접 확인하는 방법**
-1. 동의한 자신의 3~5개 랩을 기록하고 각 랩에서 MP4와 프레임별 입력 대응표를 생성한다.
-2. 출발·급회전·게이트 통과 프레임을 멈춰 로그 시각과 영상/라벨이 맞는지 확인한다.
-3. 하나의 랩 전체를 검증용으로 분리해 CPU로 작은 BC 모델을 학습한다. 같은 랩의 프레임을 양쪽에 섞지 않는다.
-4. `stick_pattern`과 `flight_method`를 별도 데이터셋으로 내보내고 서로 섞이지 않는지 확인한다.
-5. 검증 오차와 학습되지 않은 랩에서의 봇 주행을 확인한다. 완주 성능보다 파이프라인 연결 여부를 먼저 판정한다.
-6. 같은 기록을 다시 렌더해 프레임 수·시간 대응·메타데이터가 재현되는지 확인한다.
-7. 발견한 누락 필드를 사용자에게 알리고 `schema_version`을 올려 명세를 확정한다. 실패하면 M4로 넘어가지 않는다.
+확인 항목:
+
+1. 자신의 3~5개 랩으로 MP4와 frame/input 대응표 생성
+2. 출발·급회전·게이트 통과 frame에서 시간 정렬 직접 확인
+3. 한 랩 전체를 validation으로 분리한 작은 CPU BC 학습
+4. `stick_pattern` / `flight_method` 별도 dataset export와 누출 검사
+5. 학습하지 않은 랩에서 봇 추론 연결 확인
+6. 동일 recording 재렌더의 frame count/time metadata 재현
+7. 실제 30/60/90초 gzip 크기, CPU/메모리, IndexedDB quota 측정
+8. 브라우저 간 re-simulation 오차 측정
+9. 누락 필드가 발견되면 사용자에게 알리고 schema version 상승
+
+실패하면 M4로 넘어가지 않는다.
 
 ## M4 · 공개
 
-배포, 계정, 데이터 활용 동의, 약관·개인정보 처리방침 초안, 기록 업로드, 서버 재시뮬레이션 검증, 트랙별 리더보드를 구현한다. 초기 저장은 SQLite + 파일.
-약관·처리방침은 출시 전 전문가 검토를 받는다. 출시 전 보안 점검도 수행한다.
-랭킹은 트랙/룰셋/물리 버전 등 동일 조건끼리 비교한다.
+배포, 계정, 데이터 활용 동의, 약관·개인정보 처리방침 초안, 기록 업로드, 서버 re-simulation 검증, 트랙별 leaderboard를 구현한다. 초기 저장은 SQLite + 파일.
 
-**내가 직접 확인하는 방법**
-1. 배포 주소를 다른 기기에서 열어 가입·로그인·로그아웃·주행·업로드를 확인한다.
-2. 데이터 활용 미동의 계정의 기록이 순위 등록 정책과 무관하게 학습용 내보내기에서 제외되는지 확인한다.
-3. 동의 버전·시각을 확인하고 철회 시 이후 내보내기에서 제외되는지 검사한다.
-4. 정상 기록은 검증 후 순위에 들어가며 시간/입력을 변조한 기록은 거부되는지 확인한다.
-5. `tester_mode=true` 기록은 공개 순위에서 제외되는지 확인한다.
-6. 다른 트랙·룰셋·물리 버전의 기록이 섞이지 않는지, 다른 계정의 기록을 수정/삭제할 수 없는지 확인한다.
-7. 문서 전문가 검토, 업로드 크기 제한, 서버 비밀 키 비노출, 백업 복원 결과를 확인한 뒤 공개한다.
+확인 항목:
+
+1. 가입/로그인/로그아웃/주행/업로드
+2. 미동의 기록의 학습 export 제외
+3. 동의 version/time과 철회 반영
+4. 정상 기록 검증 후 leaderboard 등록, 변조 기록 거부
+5. `tester_mode=true` 기록 공개 leaderboard 제외
+6. 다른 track/ruleset/physics version 기록 격리
+7. 다른 계정 기록 수정/삭제 방지
+8. 전문가 약관 검토, 보안 점검, backup/restore 확인
 
 ## M5 · 모드 확장
 
-장애물 코스, PVE(환경 또는 AI 상대), 비동기 팀 레이스(팀원 기록 합산)를 추가한다.
-각 모드의 성공·실패·점수·팀 기록 합산 방식을 룰셋으로 버전 관리한다.
+장애물 코스, PVE, 비동기 팀 레이스를 추가하고 모든 성공·실패·점수·팀 합산 규칙을 versioned ruleset으로 관리한다.
 
-**내가 직접 확인하는 방법**
-1. 장애물을 통과하거나 충돌해 점수·페널티·실패 처리가 룰셋대로인지 확인한다.
-2. PVE 목표 달성/실패를 각각 시도하고 고스트와 기록이 그대로 재생되는지 확인한다.
-3. 팀원 두 명이 서로 다른 시간에 기록을 올려 합산 순위를 확인한다.
-4. 중복 업로드, 미완주, 팀 변경, 조건이 다른 기록이 합산에 잘못 포함되지 않는지 확인한다.
+확인 항목:
+
+1. 장애물 통과/충돌 penalty
+2. PVE 성공/실패와 ghost/recording 재생
+3. 비동기 팀 기록 합산
+4. 중복 upload/미완주/팀 변경/조건 불일치 격리
 
 ## M6 · 데이터셋
 
-Playwright 헤드리스 브라우저로 MP4 + 깊이·분할·게이트 코너 라벨을 대량 리렌더한다.
-렌더 작업 재시도·이어하기, 버전 고정, 큐레이션, 데이터셋 카드를 준비한다.
-카드에는 수집 조건, 동의 범위, 선별 기준, 분할 기준, 한계 및 버전을 기록한다.
+Playwright headless browser로 MP4 + depth/segmentation/gate-corner label을 대량 리렌더한다. retry/resume, version 고정, curation, dataset card를 준비한다.
 
-**내가 직접 확인하는 방법**
-1. 작은 배치를 먼저 렌더해 MP4를 재생하고 같은 프레임의 깊이·분할·코너 오버레이를 확인한다.
-2. 화면 밖/가려진 게이트 코너의 가시성 표시와 깊이 단위(m)를 확인한다.
-3. 렌더 작업을 중단 후 재시작해 완료한 기록이 중복되지 않고 실패 작업만 재시도되는지 확인한다.
-4. 동의가 없는 기록, 손상 기록, 검증 실패 기록을 넣어 모두 제외되는지 검사한다.
-5. 플레이어/세션/랩 중복으로 학습·검증·평가 데이터가 새지 않는지 확인하고 파일 해시·개수·카드를 대조한다.
+확인 항목:
+
+1. 작은 batch MP4 + depth/segmentation/corner overlay
+2. 화면 밖/가림 상태와 depth meter 단위 확인
+3. 중단 후 재시작 시 중복 없이 실패 작업만 retry
+4. 미동의/손상/검증 실패 recording 제외
+5. player/session/lap 단위 train/validation/test leakage 방지
 
 ## M7 · AI 봇
 
-검증된 상위 기록으로 Python/PyTorch BC를 CPU에서 시작한다.
-ONNX(모델 교환 형식)로 내보내 브라우저 안에서 봇을 실행하고 이후 강화학습으로 보정한다.
-영상 관측과 조종 출력 계약은 M3에서 확정한 것을 따른다.
+검증된 기록으로 Python/PyTorch BC를 CPU에서 시작하고 ONNX로 내보내 브라우저에서 실행한다. 이후 강화학습으로 보정한다.
 
-**내가 직접 확인하는 방법**
-1. 동일 조건 리더보드에서 상위 기록과 동의 여부를 함께 검사해 학습 목록을 만든다.
-2. 분리한 평가 세션에서 완주율·충돌 수·랩타임과 입력 예측 오차를 측정한다.
-3. 같은 관측을 Python 모델과 ONNX 모델에 넣어 출력 차이가 허용 오차 안인지 확인한다.
-4. 브라우저에서 봇을 출발시켜 완주를 관찰하고 목표 기기의 추론 시간·프레임 지연을 측정한다.
-5. 강화학습 보정 전후를 같은 평가 트랙과 시드로 비교해 개선과 퇴행을 기록한다.
+확인 항목:
 
-## M8 · 실시간 멀티플레이 (동시 접속자가 충분해진 뒤)
+1. 동일 조건 기록 + 동의 기준 학습 목록 생성
+2. 분리 평가 세션의 완주율/충돌/랩타임/input error
+3. Python ↔ ONNX 출력 오차
+4. browser inference latency와 frame 지연
+5. 강화학습 전후 동일 평가조건 비교
 
-PVP·팀전을 추가한다. 개발 전에 동시 접속 통계로 필요한 규모와 지연 목표를 정한다.
-서버 권위, 시간 동기화, 예측/보정, 연결 해제와 재접속 정책을 설계한다.
+## M8 · 실시간 멀티플레이
 
-**내가 직접 확인하는 방법**
-1. 두 기기에서 같은 방에 접속해 출발·위치·게이트 판정·최종 순위를 비교한다.
-2. 지연·패킷 손실을 주입하고 화면 보정과 판정이 합의한 기준을 지키는지 확인한다.
-3. 연결 종료/재접속, 팀원 이탈, 동시 완주를 시험해 점수 중복이나 잘못된 승리가 없는지 확인한다.
-4. 목표 동접 수의 부하 시험 결과와 운영 비용을 확인한 뒤 공개한다.
+동시 접속자가 충분해진 뒤 PVP/팀전을 추가한다. 서버 권위, 시간 동기화, prediction/correction, disconnect/reconnect 정책을 설계한다.
+
+확인 항목:
+
+1. 두 기기 출발/위치/gate/final ranking 일치
+2. latency/packet loss 주입
+3. disconnect/reconnect/team member leave/simultaneous finish
+4. 목표 concurrency load test와 운영 비용 확인
