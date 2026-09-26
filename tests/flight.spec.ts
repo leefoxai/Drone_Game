@@ -1,10 +1,28 @@
 import { test, expect } from '@playwright/test';
 
-test('호버 유지, 키보드 상승, 일시정지, 튜닝과 카메라 전환',async({page})=>{
+test('공개 모드는 키보드 + 쉬운 조종만 노출하고 고급 입력 우회를 막는다',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('drone.input.v1',JSON.stringify({'Old Controller':{}})));
+  await page.goto('/');const telemetry=page.locator('#telemetry');
+  await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
+  await expect(telemetry).toHaveAttribute('data-tester-mode','false');
+  await expect(telemetry).toHaveAttribute('data-mode','assisted');
+  await expect(telemetry).toHaveAttribute('data-input-device-kind','keyboard');
+  await expect(telemetry).toHaveAttribute('data-public-leaderboard-eligible','true');
+  await expect(page.locator('#tester-badge')).toBeHidden();
+  await expect(page.locator('[data-tester-control]')).toHaveCount(4);
+  for(const node of await page.locator('[data-tester-control]').all())await expect(node).toBeHidden();
+  await page.evaluate(()=>{
+    const mode=document.querySelector('#flight-mode') as HTMLSelectElement;mode.value='acro';mode.dispatchEvent(new Event('change',{bubbles:true}));
+    const source=document.querySelector('#input-source') as HTMLSelectElement;source.value='gamepad';source.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await expect(telemetry).toHaveAttribute('data-mode','assisted');
+  await expect(telemetry).toHaveAttribute('data-input-device-kind','keyboard');
+});
+
+test('공개 모드 호버 유지, 키보드 상승, 일시정지와 카메라 전환',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');const telemetry=page.locator('#telemetry');
   await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
-  await expect(telemetry).toHaveAttribute('data-mode','assisted');
   await expect(telemetry).toHaveAttribute('data-track-id','training-five-v2');
   await expect(telemetry).toHaveAttribute('data-assist-version','1');
   await expect(telemetry).toHaveAttribute('data-camera-mode','chase');
@@ -13,6 +31,10 @@ test('호버 유지, 키보드 상승, 일시정지, 튜닝과 카메라 전환'
   expect(Number(await telemetry.getAttribute('data-pilot-throttle'))).toBe(.5);
   expect(Number(await telemetry.getAttribute('data-applied-throttle'))).not.toBe(.5);
   expect(Number(await telemetry.getAttribute('data-camera-aspect'))).toBeGreaterThan(1);
+  expect(await telemetry.getAttribute('data-assist-target-vx')).not.toBeNull();
+  expect(await telemetry.getAttribute('data-assist-target-vz')).not.toBeNull();
+  expect(await telemetry.getAttribute('data-assist-target-vy')).not.toBeNull();
+  expect(await telemetry.getAttribute('data-assist-target-yaw-rate')).not.toBeNull();
   await expect.poll(async()=>Number(await telemetry.getAttribute('data-tick')),{timeout:15000}).toBeGreaterThan(720);
   expect(Math.abs(Number(await telemetry.getAttribute('data-altitude'))-3)).toBeLessThan(.1);
   await page.keyboard.down('w');await page.waitForTimeout(700);await page.keyboard.up('w');
@@ -34,13 +56,29 @@ test('호버 유지, 키보드 상승, 일시정지, 튜닝과 카메라 전환'
   expect(errors).toEqual([]);
 });
 
-test('가상 게임패드 매핑·보정 저장, 재로딩 복원, 연결 해제 중단',async({page})=>{
+test('tester=1에서는 Acro·입력장치·보정·rates UI가 다시 열린다',async({page})=>{
+  await page.goto('/?tester=1');const telemetry=page.locator('#telemetry');
+  await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
+  await expect(telemetry).toHaveAttribute('data-tester-mode','true');
+  await expect(telemetry).toHaveAttribute('data-public-leaderboard-eligible','false');
+  await expect(page.locator('#tester-badge')).toBeVisible();
+  for(const node of await page.locator('[data-tester-control]').all())await expect(node).toBeVisible();
+  await page.locator('#flight-mode').selectOption('acro');
+  await expect(telemetry).toHaveAttribute('data-mode','acro');
+  await expect(telemetry).toHaveAttribute('data-assist-version','none');
+  await expect(page.locator('#tilt-out')).toHaveText('27°');
+  await expect(page.locator('#rc-rate-out')).toHaveText('1.00');
+  await expect(page.locator('#super-rate-out')).toHaveText('0.70');
+  await expect(page.locator('#expo-out')).toHaveText('0.00');
+});
+
+test('tester 가상 RC 조종기 매핑·보정 저장, 재로딩 복원, 연결 해제 중단',async({page})=>{
   await page.addInitScript(()=>{
-    const device={id:'Test USB Controller',index:0,connected:true,mapping:'',axes:[0,0,0,0],buttons:[],timestamp:0};
+    const device={id:'Test USB RC Controller',index:0,connected:true,mapping:'',axes:[0,0,0,0],buttons:[],timestamp:0};
     Object.defineProperty(navigator,'getGamepads',{value:()=>device.connected?[device]:[]});
     (window as unknown as {testPad:typeof device}).testPad=device;
   });
-  await page.goto('/');await page.getByText('조종기 연결 · 축 보정',{exact:true}).click();
+  await page.goto('/?tester=1');await page.getByText('조종기 연결 · 축 보정',{exact:true}).click();
   await expect(page.locator('#device-message')).toContainText('4축 연결');
   await page.getByRole('button',{name:'1. 중립에서 보정 시작'}).click();
   for(const value of [-1,1]){
@@ -56,6 +94,7 @@ test('가상 게임패드 매핑·보정 저장, 재로딩 복원, 연결 해제
   await expect(page.getByLabel('롤 반전',{exact:true})).not.toBeChecked();
   await page.getByText('조종기 연결 · 축 보정',{exact:true}).click();
   await page.locator('#input-source').selectOption('gamepad');
+  await expect(page.locator('#telemetry')).toHaveAttribute('data-input-device-kind','rc_joystick');
   await page.evaluate(()=>{(window as unknown as {testPad:{axes:number[]}}).testPad.axes=[0,.2,0,0];});
   await page.getByRole('button',{name:'재개',exact:false}).click();
   await expect(page.locator('#telemetry')).toHaveAttribute('data-running','true');
@@ -72,13 +111,10 @@ test('키보드 강하 충돌 시 초기 위치로 리셋',async({page})=>{
   expect(Number(await page.locator('#telemetry').getAttribute('data-altitude'))).toBeGreaterThan(2.8);
 });
 
-test('대회용 Acro에서는 높이 보조가 꺼지고 FPV 수평선은 토글 가능하다',async({page})=>{
-  await page.goto('/');const telemetry=page.locator('#telemetry');
+test('tester 대회용 Acro에서는 높이 보조가 꺼지고 FPV 수평선은 토글 가능하다',async({page})=>{
+  await page.goto('/?tester=1');const telemetry=page.locator('#telemetry');
   await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
   await page.locator('#flight-mode').selectOption('acro');
-  await expect(telemetry).toHaveAttribute('data-mode','acro');
-  await expect(telemetry).toHaveAttribute('data-assist-version','none');
-  await expect(page.locator('#tilt-out')).toHaveText('27°');
   await page.locator('#track-select').selectOption('race-five-v2');
   await expect(telemetry).toHaveAttribute('data-track-id','race-five-v2');
   await expect(telemetry).toHaveAttribute('data-gate-count','5');
@@ -94,7 +130,7 @@ test('대회용 Acro에서는 높이 보조가 꺼지고 FPV 수평선은 토글
   await expect(page.locator('#scene')).toHaveAttribute('data-rendered','true');
 });
 
-test('대회용 쉬운 조종에서는 다음 게이트 높이 차가 표시된다',async({page})=>{
+test('공개 대회용 쉬운 조종에서는 다음 게이트 높이 차가 표시된다',async({page})=>{
   await page.goto('/');await page.locator('#track-select').selectOption('race-five-v2');
   await expect(page.locator('#telemetry')).toHaveAttribute('data-height-assist','true');
   await expect(page.locator('#height-assist')).toBeVisible();
