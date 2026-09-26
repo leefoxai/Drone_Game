@@ -6,9 +6,9 @@ import { FixedClock } from '../../../packages/physics/src/clock';
 import { TRACKS, TRAINING_TRACK, collision, isTrainingTrack } from '../../../packages/physics/src/track';
 import type { Track } from '../../../packages/physics/src/track';
 import { Race } from '../../../packages/physics/src/race';
-import { ASSIST_VERSION, assistedInput } from '../../../packages/physics/src/assist';
-import { LapTelemetryBuffer, SessionLapArchive, cameraSnapshot, dataPartitionKey } from '../../../packages/physics/src/telemetry';
-import type { CameraMode, ControlContext, ControlMode } from '../../../packages/physics/src/telemetry';
+import { ASSIST_VERSION, assistedCommand } from '../../../packages/physics/src/assist';
+import { LapTelemetryBuffer, SessionLapArchive, cameraSnapshot, dataPartitionKey, publicLeaderboardEligible } from '../../../packages/physics/src/telemetry';
+import type { CameraMode, ControlContext, ControlMode, InputDeviceKind } from '../../../packages/physics/src/telemetry';
 import { createWorld } from './world';
 import type { HorizonLine } from './world';
 import { Diagnostics } from './diagnostics';
@@ -16,21 +16,28 @@ import { ControllerPanel } from './controller-panel';
 
 const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const canvas=el<HTMLCanvasElement>('scene');
+const testerMode=new URLSearchParams(location.search).get('tester')==='1';
 const profile=structuredClone(profileData);
 let track:Track=TRAINING_TRACK;
 let flightMode:ControlMode='assisted';
 let cameraMode:CameraMode='chase';
 let artificialHorizonEnabled=true;
 let userHeightAssistEnabled=true;
+let source:'keyboard'|'gamepad'='keyboard';
+let connectedDeviceKind:Exclude<InputDeviceKind,'keyboard'>='gamepad';
 const tiltByMode:Record<ControlMode,number>={assisted:15,acro:27};
 let tilt=tiltByMode[flightMode], fov=75;
 const heightAssistEnabled=()=>userHeightAssistEnabled&&(isTrainingTrack(track)||flightMode==='assisted');
 const horizonEnabled=()=>artificialHorizonEnabled&&cameraMode==='fpv';
+const currentInputDeviceKind=():InputDeviceKind=>source==='keyboard'?'keyboard':connectedDeviceKind;
 const context=():ControlContext=>({
   trackId:track.id,
   controlMode:flightMode,
   aircraftProfileVersion:profile.version,
   assistVersion:flightMode==='assisted'?ASSIST_VERSION:null,
+  physicsVersion:PHYSICS_VERSION,
+  inputDeviceKind:currentInputDeviceKind(),
+  testerMode,
   cameraMode,
   artificialHorizonEnabled:horizonEnabled(),
   heightAssistEnabled:heightAssistEnabled(),
@@ -40,7 +47,7 @@ const clock=new FixedClock(), race=new Race(track,dataPartitionKey(context()));
 const archive=new SessionLapArchive();
 const recorder=new LapTelemetryBuffer(context());
 const keys=new Set<string>();
-let paused=false, source='keyboard', readyFrames=0;
+let paused=false, readyFrames=0;
 let throttle=hoverThrottle(profile), hoverReference=true;
 let pilotInput:Input={throttle:.5,roll:0,pitch:0,yaw:0};
 let input:Input={throttle,roll:0,pitch:0,yaw:0};
@@ -49,6 +56,12 @@ let lastTime=0, lastUI=0, lastGraphTick=-1, resetPending='', resets=0, frameId=0
 const diagnostics=new Diagnostics(el('rate-graph'),el('thrust-graph'),el('minimap'));
 
 function message(text:string){el('flight-message').textContent=text;}
+function enforcePublicMode(){
+  if(testerMode)return;
+  flightMode='assisted';source='keyboard';
+  el<HTMLSelectElement>('flight-mode').value='assisted';
+  el<HTMLSelectElement>('input-source').value='keyboard';
+}
 function syncCameraTilt(){
   tilt=tiltByMode[flightMode];
   const field=el<HTMLInputElement>('tilt');field.value=String(tilt);el('tilt-out').textContent=tilt+'°';
@@ -75,19 +88,21 @@ function pause(reason:string){
 }
 const controller=new ControllerPanel(pause);
 function reset(reason='시작 위치로 초기화 · 랩을 새로 시작합니다.') {
+  enforcePublicMode();
   state=initialState(profile);previous=cloneState(state);clock.reset();race.reset();recorder.reset();diagnostics.reset();
   throttle=hoverThrottle(profile);hoverReference=true;pilotInput={throttle:.5,roll:0,pitch:0,yaw:0};input={throttle,roll:0,pitch:0,yaw:0};
   lastGraphTick=-1;keys.clear();world?.resetCamera();
   resets++;message(reason);
-  if(source==='gamepad') pause(reason+' · 스틱 확인 후 재개하세요.');
+  if(testerMode&&source==='gamepad') pause(reason+' · 스틱 확인 후 재개하세요.');
 }
 function applyContext(reason:string){
+  enforcePublicMode();
   race.setContext(track,dataPartitionKey(context()));recorder.setContext(context());reset(reason);
 }
 function togglePause(){
   if(!paused){pause('일시정지 · 진행 중이던 랩은 무효입니다. R로 새 랩을 시작하세요.');return;}
-  if(source==='gamepad'&&!controller.poll()){message('조종기 연결 또는 축 매핑을 먼저 확인하세요.');return;}
-  if(el<HTMLDetailsElement>('input-settings').open){message('조종기 설정을 접은 뒤 재개하세요.');return;}
+  if(testerMode&&source==='gamepad'&&!controller.poll()){message('조종기 연결 또는 축 매핑을 먼저 확인하세요.');return;}
+  if(testerMode&&el<HTMLDetailsElement>('input-settings').open){message('조종기 설정을 접은 뒤 재개하세요.');return;}
   paused=false;clock.reset();lastTime=performance.now();el('pause').innerHTML='일시정지 <kbd>P</kbd>';
   message(race.valid?'비행 재개 · 노란 게이트를 순서대로 통과하세요.':'연습 재개 · 현재 랩 무효, R로 새 랩 시작');
 }
@@ -115,12 +130,17 @@ function updateHeightAssist(){
 function snapshot(){return cameraSnapshot(fov,Math.max(1,canvas.clientWidth),Math.max(1,canvas.clientHeight),devicePixelRatio,cameraMode,horizonEnabled(),heightAssistEnabled());}
 function renderScene(alpha:number,elapsed:number){updateHorizon(world.render(previous,state,alpha,cameraMode,tilt,fov,race.nextGate,elapsed));}
 
+for(const node of document.querySelectorAll<HTMLElement>('[data-tester-control]'))node.hidden=!testerMode;
+el('tester-badge').hidden=!testerMode;
+enforcePublicMode();
+
 el('reset').onclick=()=>reset();
 el('pause').onclick=togglePause;
 el('camera').onclick=switchCamera;
 el<HTMLInputElement>('horizon-toggle').onchange=event=>{artificialHorizonEnabled=(event.target as HTMLInputElement).checked;applyContext('인공 수평선 설정 변경 · 새 학습 파티션에서 시작합니다.');};
 el<HTMLInputElement>('height-assist-toggle').onchange=event=>{userHeightAssistEnabled=(event.target as HTMLInputElement).checked;applyContext('높이 보조 설정 변경 · 새 학습 파티션에서 시작합니다.');};
 el<HTMLSelectElement>('flight-mode').onchange=event=>{
+  if(!testerMode){enforcePublicMode();return;}
   flightMode=(event.target as HTMLSelectElement).value as ControlMode;syncCameraTilt();syncTrackUI();
   el('mode-badge').textContent=flightMode==='assisted'?'쉬운 조종':'ACRO';
   el('control-help').innerHTML=flightMode==='assisted'
@@ -134,7 +154,12 @@ el<HTMLSelectElement>('track-select').onchange=event=>{
 };
 el('hover').onclick=()=>{if(source==='keyboard'){hoverReference=true;throttle=hoverThrottle(profile,state.charge);message('호버 스로틀 설정 · 수평일 때만 고도를 유지합니다.');}};
 el<HTMLSelectElement>('input-source').onchange=event=>{
-  source=(event.target as HTMLSelectElement).value;reset('입력 방식 변경 · 새 주행 준비');
+  if(!testerMode){enforcePublicMode();return;}
+  source=(event.target as HTMLSelectElement).value as 'keyboard'|'gamepad';
+  if(source==='gamepad'){
+    controller.poll();connectedDeviceKind=controller.inputDeviceKind??'gamepad';
+  }
+  applyContext('입력 방식 변경 · 입력 장치별 학습 파티션을 새로 시작합니다.');
   if(source==='gamepad')pause('조종기 매핑과 스로틀을 확인한 뒤 재개하세요.');
   el<HTMLButtonElement>('hover').disabled=source!=='keyboard';
 };
@@ -146,7 +171,7 @@ const tune=(id:string,callback:(value:number)=>void,format:(value:number)=>strin
   const field=el<HTMLInputElement>(id);field.oninput=()=>{const value=Number(field.value);if(!Number.isFinite(value))return;callback(value);el(id+'-out').textContent=format(value);if(physics){race.invalidate();message('튜닝 즉시 적용 · 현재 랩 무효, R로 새 랩을 시작하세요.');}};
 };
 const fixed=(v:number)=>v.toFixed(2);
-for(const [id,key] of [['rc-rate','rcRate'],['super-rate','superRate'],['expo','expo']] as const)tune(id,value=>{profile.rates[key]=value;el('max-rate').textContent='최대 '+Math.round(rate(1,profile.rates)*180/Math.PI)+' °/s · 세 축 공통';},fixed,true);
+for(const [id,key] of [['rc-rate','rcRate'],['super-rate','superRate'],['expo','expo']] as const)tune(id,value=>{if(!testerMode)return;profile.rates[key]=value;el('max-rate').textContent='최대 '+Math.round(rate(1,profile.rates)*180/Math.PI)+' °/s · 세 축 공통';},fixed,true);
 tune('tilt',value=>{tilt=value;tiltByMode[flightMode]=value;},value=>value+'°');
 tune('fov',value=>fov=value,value=>value+'°');
 tune('mass',value=>profile.massKg=value,value=>value.toFixed(2)+' kg',true);
@@ -170,15 +195,20 @@ function updateUI(){
   el('lap-time').textContent=time(race.elapsed(state.tick));el('gate-progress').textContent='다음 게이트 '+(race.nextGate+1)+' / '+race.gateCount+(race.valid?'':' · 랩 무효');el('best-lap').textContent=race.bestSeconds===null?'이 조건 완료 랩 없음':'이 조건 최고 '+time(race.bestSeconds)+' · '+race.laps+'랩';
   const camera=recorder.latestCamera??snapshot();const telemetry=el('telemetry');
   Object.assign(telemetry.dataset,{
-    tick:String(state.tick),altitude:String(state.position[1]),running:String(!paused),resets:String(resets),valid:String(race.valid),physicsVersion:String(PHYSICS_VERSION),profileVersion:String(profile.version),mass:String(profile.massKg),nextGate:String(race.nextGate+1),gateCount:String(race.gateCount),mode:flightMode,assistVersion:flightMode==='assisted'?String(ASSIST_VERSION):'none',trackId:track.id,speed:String(Math.hypot(...state.velocity)),cameraMode,artificialHorizon:String(horizonEnabled()),heightAssist:String(heightAssistEnabled()),
+    tick:String(state.tick),altitude:String(state.position[1]),running:String(!paused),resets:String(resets),valid:String(race.valid),physicsVersion:String(PHYSICS_VERSION),profileVersion:String(profile.version),mass:String(profile.massKg),nextGate:String(race.nextGate+1),gateCount:String(race.gateCount),mode:flightMode,assistVersion:flightMode==='assisted'?String(ASSIST_VERSION):'none',trackId:track.id,speed:String(Math.hypot(...state.velocity)),cameraMode,artificialHorizon:String(horizonEnabled()),heightAssist:String(heightAssistEnabled()),testerMode:String(testerMode),inputDeviceKind:currentInputDeviceKind(),publicLeaderboardEligible:String(publicLeaderboardEligible(context())),
     pilotThrottle:String(pilotInput.throttle),pilotRoll:String(pilotInput.roll),pilotPitch:String(pilotInput.pitch),pilotYaw:String(pilotInput.yaw),appliedThrottle:String(input.throttle),appliedRoll:String(input.roll),appliedPitch:String(input.pitch),appliedYaw:String(input.yaw),recordedSamples:String(recorder.sampleCount),learningPartition:dataPartitionKey(context()),archivedLaps:String(archive.count(context())),cameraVerticalFovRad:String(camera.verticalFovRad),cameraAspect:String(camera.aspectRatio),cameraWidth:String(camera.viewportWidth),cameraHeight:String(camera.viewportHeight)
   });
-  updateHeightAssist();const graphAxis=Number(el<HTMLSelectElement>('graph-axis').value);el('live-rate').textContent=(state.omega[graphAxis]!*180/Math.PI).toFixed(0)+' °/s';el('live-thrust').textContent=state.thrustN.toFixed(1)+' N';diagnostics.draw(graphAxis,state,race.nextGate,track);controller.updateDisplay();
+  const targets=recorder.latest?.assistTargets;
+  if(targets){telemetry.dataset.assistTargetVx=String(targets.horizontalVelocityWorldMps[0]);telemetry.dataset.assistTargetVz=String(targets.horizontalVelocityWorldMps[1]);telemetry.dataset.assistTargetVy=String(targets.verticalVelocityMps);telemetry.dataset.assistTargetYawRate=String(targets.yawRateRadPerSec);}
+  else{delete telemetry.dataset.assistTargetVx;delete telemetry.dataset.assistTargetVz;delete telemetry.dataset.assistTargetVy;delete telemetry.dataset.assistTargetYawRate;}
+  updateHeightAssist();const graphAxis=Number(el<HTMLSelectElement>('graph-axis').value);el('live-rate').textContent=(state.omega[graphAxis]!*180/Math.PI).toFixed(0)+' °/s';el('live-thrust').textContent=state.thrustN.toFixed(1)+' N';diagnostics.draw(graphAxis,state,race.nextGate,track);if(testerMode)controller.updateDisplay();
 }
 function frame(now:number){
-  frameId=requestAnimationFrame(frame);const elapsed=lastTime?Math.max(0,(now-lastTime)/1000):0;lastTime=now;const padInput=controller.poll();
+  frameId=requestAnimationFrame(frame);const elapsed=lastTime?Math.max(0,(now-lastTime)/1000):0;lastTime=now;
+  const padInput=testerMode?controller.poll():null;
+  if(testerMode&&source==='gamepad'&&padInput&&controller.inputDeviceKind&&controller.inputDeviceKind!==connectedDeviceKind){connectedDeviceKind=controller.inputDeviceKind;applyContext('입력 장치 종류 변경 · 새 학습 파티션에서 시작합니다.');return;}
   if(readyFrames<3){readyFrames++;renderScene(1,0);if(readyFrames===3)el('status').textContent='3D 장면 준비 완료';updateUI();return;}
-  if(!paused&&elapsed>0.25)pause('긴 프레임 지연으로 중단 · tick을 건너뛰지 않았습니다. 재개하거나 R을 누르세요.');if(!paused&&source==='gamepad'&&!padInput)pause('조종기 연결 또는 매핑 오류 · 비행을 멈췄습니다.');
+  if(!paused&&elapsed>0.25)pause('긴 프레임 지연으로 중단 · tick을 건너뛰지 않았습니다. 재개하거나 R을 누르세요.');if(!paused&&testerMode&&source==='gamepad'&&!padInput)pause('조종기 연결 또는 매핑 오류 · 비행을 멈췄습니다.');
   if(!paused){clock.advance(elapsed,()=>{
     if(resetPending)return;previous=cloneState(state);
     if(source==='keyboard'){
@@ -186,10 +216,14 @@ function frame(now:number){
       if(flightMode==='assisted')pilotInput={throttle:.5+axis('KeyW','KeyS')*.5,roll:axis('ArrowLeft','ArrowRight'),pitch:axis('ArrowDown','ArrowUp'),yaw:axis('KeyA','KeyD')};
       else pilotInput={throttle,roll:axis('ArrowLeft','ArrowRight')*.35,pitch:axis('ArrowDown','ArrowUp')*.25,yaw:axis('KeyA','KeyD')*.35};
     }else pilotInput=padInput!;
-    input=flightMode==='assisted'?assistedInput(state,pilotInput,profile):{...pilotInput};recorder.record(state.tick,pilotInput,input,snapshot());step(state,input,profile);
+    let assistTargets=null;
+    if(flightMode==='assisted'){
+      const assisted=assistedCommand(state,pilotInput,profile);input=assisted.appliedInput;assistTargets=assisted.targets;
+    }else input={...pilotInput};
+    recorder.record(state.tick,pilotInput,input,snapshot(),assistTargets);step(state,input,profile);
     if(collision(previous.position,state.position,track)){resetPending='충돌 또는 트랙 이탈 · 시작 위치로 초기화했습니다.';return;}
     const active=flightMode==='assisted'?Math.abs(pilotInput.throttle-.5)>.02||Math.abs(pilotInput.roll)+Math.abs(pilotInput.pitch)+Math.abs(pilotInput.yaw)>.01:Math.abs(pilotInput.throttle-hoverThrottle(profile,state.charge))>.02||Math.abs(pilotInput.roll)+Math.abs(pilotInput.pitch)+Math.abs(pilotInput.yaw)>.01;
-    if(race.update(previous.position,state.position,state.tick,active)){const valid=race.valid,record=recorder.finalize(race.lastSeconds!,valid);archive.add(record);message(valid?'랩 완료! '+time(race.lastSeconds!)+' · 같은 시야/보조 조건 순위에 기록':'연습 랩 완료 · 설정 변경/중단으로 기록 무효');}
+    if(race.update(previous.position,state.position,state.tick,active)){const valid=race.valid,record=recorder.finalize(race.lastSeconds!,valid);archive.add(record);message(valid?'랩 완료! '+time(race.lastSeconds!)+' · '+record.trainingUse+' 용도로 분류':'연습 랩 완료 · 설정 변경/중단으로 기록 무효');}
     if(state.charge<=0){resetPending='배터리 소진 · 새 배터리로 다시 시작합니다.';return;}if(state.tick%8===0&&state.tick!==lastGraphTick){diagnostics.sample(state,input,4*profile.maxMotorThrustN);lastGraphTick=state.tick;}
   });if(resetPending){const reason=resetPending;resetPending='';reset(reason);}}
   renderScene(paused?1:clock.alpha,Math.min(elapsed,.05));if(now-lastUI>70){updateUI();lastUI=now;}
