@@ -20,8 +20,9 @@ const off:RecordingMetadata['consent']={granted:false,scope:[],policyVersion:nul
 const on:RecordingMetadata['consent']={granted:true,scope:['local_bc_training'],policyVersion:'m3-local-training-v1',grantedAtUtc:'2026-09-26T11:00:00.000Z'};
 
 test('학습 활용 동의는 최초 기본 OFF이고 사용자가 켠 상태를 로컬에 보존한다',async({page})=>{
-  await page.addInitScript(()=>localStorage.removeItem('drone.training-consent.v1'));
   await page.goto('/');
+  await page.evaluate(()=>localStorage.removeItem('drone.training-consent.v1'));
+  await page.reload();
   await expect(page.locator('#training-consent')).not.toBeChecked();
   await expect(page.locator('#training-consent-status')).toContainText('미동의');
 
