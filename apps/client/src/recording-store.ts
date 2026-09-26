@@ -22,6 +22,7 @@ interface StoredLapRow extends StoredLapSummary { blob:Blob }
 
 function request<T>(req:IDBRequest<T>):Promise<T>{return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
 function transactionDone(tx:IDBTransaction):Promise<void>{return new Promise((resolve,reject)=>{tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
+function arrayBuffer(bytes:Uint8Array):ArrayBuffer{return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer;}
 async function db():Promise<IDBDatabase>{
   return new Promise((resolve,reject)=>{
     const open=indexedDB.open(DB_NAME,DB_VERSION);
@@ -44,7 +45,7 @@ export async function saveRecording(recording:FullLapRecording):Promise<StoredLa
     recordingId:recording.metadata.recordingId,createdAtUtc:recording.metadata.createdAtUtc,trackId:recording.metadata.trackId,partitionKey:recording.metadata.partitionKey,
     seconds:recording.metadata.outcome.seconds,outcome:recording.metadata.outcome.status,trainingUse:recording.metadata.trainingUse,testerMode:recording.metadata.testerMode,
     publicLeaderboardEligible:recording.metadata.publicLeaderboardEligible,compressedBytes:encoded.compressedBytes,uncompressedBytes:encoded.uncompressedBytes,
-    blob:new Blob([encoded.bytes],{type:'application/gzip'}),
+    blob:new Blob([arrayBuffer(encoded.bytes)],{type:'application/gzip'}),
   };
   const database=await db(),tx=database.transaction(STORE,'readwrite'),done=transactionDone(tx);tx.objectStore(STORE).put(row);await done;database.close();
   const {blob:_,...summary}=row;return summary;
