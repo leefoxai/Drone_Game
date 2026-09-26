@@ -1,5 +1,5 @@
 import { CHANNELS, STORAGE_KEY, defaultMapping, deviceKind, normalizeAxis, readGamepad, validMapping } from './input';
-import type { Mapping } from './input';
+import type { InputDeviceKind, Mapping } from './input';
 const labels={throttle:'스로틀',roll:'롤',pitch:'피치',yaw:'요'};
 const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 export class ControllerPanel {
@@ -40,6 +40,7 @@ export class ControllerPanel {
       catch{el('input-feedback').textContent='저장 공간에 접근할 수 없습니다. 이번 세션에만 적용됩니다.';}
     };
   }
+  get inputDeviceKind():InputDeviceKind|null{return this.pad?deviceKind(this.pad):null;}
   private drawMapping() {
     const container=el('axis-settings');container.replaceChildren();
     for(const channel of CHANNELS) {
