@@ -121,6 +121,10 @@ const copyState=(state:State):State=>cloneState(state);
 function controllerState(state:State):ControllerStateRecord {
   return {tick:state.tick,integral:[...state.integral],previousOmega:[...state.previousOmega],derivative:[...state.derivative],motors:[...state.motors],charge:state.charge,voltage:state.voltage,thrustN:state.thrustN,targetOmega:[...state.targetOmega],acceleration:[...state.acceleration]};
 }
+function cameraExtrinsics(camera:CameraSnapshot):Pick<RecordingMetadata['camera'],'relativePositionM'|'relativeOrientation'> {
+  if(camera.cameraMode==='fpv')return {relativePositionM:[0,.035,-.17],relativeOrientation:null};
+  return {relativePositionM:[0,.38,3.2],relativeOrientation:null};
+}
 
 export class M2LapRecorder {
   private source:RecorderMetadataSource|null=null;
@@ -155,13 +159,18 @@ export class M2LapRecorder {
   event(tick:number,type:EventType,payload:Record<string,unknown>={}){if(this.active)this.events.push({tick,sequence:this.eventSequence++,type,payload:structuredClone(payload)});}
   async finish(status:LapOutcome,seconds:number|null,completedGates:number,reason:string|null):Promise<FullLapRecording|null>{
     if(!this.source)return null;
-    const source=this.source;this.source=null;
-    const type:EventType=status==='complete'?'lap_complete':status==='invalid'?'collision':'lap_abort';
-    this.events.push({tick:this.states.at(-1)!.tick,sequence:this.eventSequence++,type,payload:{reason}});
-    const partitionKey=dataPartitionKey(source.context);
-    const trainingUse=classifyTrainingUse(source.context,this.inputs);
-    const trackSnapshot=structuredClone(source.track), profileSnapshot=structuredClone(source.profile);
+    const source=this.source;
+    const frames=this.frames.map(v=>structuredClone(v)),inputs=this.inputs.map(v=>structuredClone(v)),states=this.states.map(v=>structuredClone(v));
+    const controllerStates=this.controllers.map(v=>structuredClone(v)),events=this.events.map(v=>structuredClone(v)),cameraChanges=this.cameras.map(v=>structuredClone(v));
+    const finalTick=states.at(-1)!.tick;
+    const terminalType:EventType=status==='complete'?'lap_complete':'lap_abort';
+    events.push({tick:finalTick,sequence:this.eventSequence++,type:terminalType,payload:{status,reason}});
+    this.source=null;this.frames=[];this.inputs=[];this.states=[];this.controllers=[];this.events=[];this.cameras=[];this.eventSequence=0;this.frameSequence=0;
+
+    const partitionKey=dataPartitionKey(source.context),trainingUse=classifyTrainingUse(source.context,inputs);
+    const trackSnapshot=structuredClone(source.track),profileSnapshot=structuredClone(source.profile);
     const rulesetSnapshot={trackId:source.track.id,orderedGates:source.track.gates.map(g=>g.id),collisionInvalidates:true,completeRequiresAllGates:true};
+    const cameraDetails=cameraExtrinsics(source.camera);
     const metadata:RecordingMetadata={
       ...source.context,
       schemaVersion:SCHEMA_VERSION,recordingFormat:RECORDING_FORMAT,
@@ -174,13 +183,11 @@ export class M2LapRecorder {
       inputDevice:structuredClone(source.inputDevice),display:structuredClone(source.display),
       controlProfile:{mode:source.context.controlMode,assistVersion:source.context.assistVersion,assistSettings:source.context.controlMode==='assisted'?structuredClone(ASSIST_SETTINGS):null},
       seed:0,prng:'none',initialState:copyState(source.initialState),environment:{gravityWorldMps2:[0,-G,0],windWorldMps:[0,0,0]},
-      camera:{...structuredClone(source.camera),nearM:.025,farM:220,relativePositionM:null,relativeOrientation:null},practiceAssist:{heightAssistEnabled:source.context.heightAssistEnabled},
+      camera:{...structuredClone(source.camera),nearM:.025,farM:220,...cameraDetails},practiceAssist:{heightAssistEnabled:source.context.heightAssistEnabled},
       clientBuild:source.clientBuild,runtime:structuredClone(source.runtime),consent:{granted:false,scope:[],policyVersion:null,grantedAtUtc:null},
-      outcome:{status,finalTick:this.states.at(-1)!.tick,seconds,completedGates,reason},
+      outcome:{status,finalTick,seconds,completedGates,reason},
     };
-    const result={metadata,frames:this.frames.map(v=>structuredClone(v)),inputs:this.inputs.map(v=>structuredClone(v)),states:this.states.map(v=>structuredClone(v)),controllerStates:this.controllers.map(v=>structuredClone(v)),events:this.events.map(v=>structuredClone(v)),cameraChanges:this.cameras.map(v=>structuredClone(v))};
-    this.frames=[];this.inputs=[];this.states=[];this.controllers=[];this.events=[];this.cameras=[];
-    return result;
+    return {metadata,frames,inputs,states,controllerStates,events,cameraChanges};
   }
   cancel(){this.source=null;this.frames=[];this.inputs=[];this.states=[];this.controllers=[];this.events=[];this.cameras=[];}
 }
