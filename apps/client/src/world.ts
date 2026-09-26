@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { DRONE_COLLISION_RADIUS_M, GATE_FRAME_THICKNESS_M, gateSolidBoxes } from '../../../packages/physics/src/track';
 import type { Track } from '../../../packages/physics/src/track';
 import type { State } from '../../../packages/physics/src/index';
+import { setCurrentCameraPose } from './camera-telemetry';
 
 export const DRONE_VISUAL_RADIUS_M = DRONE_COLLISION_RADIUS_M;
 export const CONE_HEIGHT_M = 0.5;
@@ -119,7 +120,9 @@ export function createWorld(canvas: HTMLCanvasElement, initialTrack:Track) {
       gateMaterials.forEach((m,i)=>{m.color.set(i===nextGate?'#ffc47b':'#7fe0d4');m.emissive.set(i===nextGate?'#b87327':'#286858');});
       if(mode==='fpv') {camera.position.copy(currentPosition).add(offset.set(0,.035,-.17).applyQuaternion(oldQuaternion));tiltQuaternion.setFromAxisAngle(new THREE.Vector3(1,0,0),tilt*Math.PI/180);camera.quaternion.copy(oldQuaternion).multiply(tiltQuaternion);}
       else {const direction=new THREE.Vector3(0,0,-1).applyQuaternion(oldQuaternion);direction.y=0;if(direction.lengthSq()<.001)direction.set(0,0,-1);direction.normalize();const desired=currentPosition.clone().addScaledVector(direction,-3.2).add(new THREE.Vector3(0,.38,0));if(first)camera.position.copy(desired);else camera.position.lerp(desired,1-Math.exp(-elapsed*8));camera.lookAt(currentPosition.clone().addScaledVector(direction,2).add(new THREE.Vector3(0,.06,0)));}
-      first=false;camera.fov=fov;camera.updateProjectionMatrix();renderer.render(scene,camera);canvas.dataset.rendered='true';canvas.dataset.cameraMode=mode;return horizonLine();
+      first=false;camera.fov=fov;camera.updateProjectionMatrix();
+      setCurrentCameraPose({positionWorldM:[camera.position.x,camera.position.y,camera.position.z],orientationWorld:[camera.quaternion.x,camera.quaternion.y,camera.quaternion.z,camera.quaternion.w],verticalFovRad:THREE.MathUtils.degToRad(camera.fov),aspectRatio:camera.aspect,nearM:camera.near,farM:camera.far});
+      renderer.render(scene,camera);canvas.dataset.rendered='true';canvas.dataset.cameraMode=mode;return horizonLine();
     },
     setGhostState(state:State|null){if(!state){ghost.visible=false;canvas.dataset.ghostVisible='false';return;}ghost.visible=true;ghost.position.fromArray(state.position);ghost.quaternion.fromArray(state.orientation);canvas.dataset.ghostVisible='true';},
     setTrack(track:Track){setTrack(track);first=true;},resetCamera(){first=true;},
