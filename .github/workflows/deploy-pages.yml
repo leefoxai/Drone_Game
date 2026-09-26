@@ -29,11 +29,14 @@ jobs:
         run: npm ci
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run full M1 test suite
+      - name: Run full M1+M2 test suite
+        env:
+          VITE_GIT_SHA: ${{ github.sha }}
         run: npm test
       - name: Build GitHub Pages artifact
         env:
           VITE_BASE: /Drone_Game/
+          VITE_GIT_SHA: ${{ github.sha }}
         run: npm run build
       - name: Setup Pages
         uses: actions/configure-pages@v5
