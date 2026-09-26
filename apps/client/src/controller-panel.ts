@@ -1,7 +1,18 @@
 import { CHANNELS, STORAGE_KEY, defaultMapping, deviceKind, normalizeAxis, readGamepad, validMapping } from './input';
 import type { InputDeviceKind, Mapping } from './input';
+import type { Input } from '../../../packages/physics/src/index';
 const labels={throttle:'스로틀',roll:'롤',pitch:'피치',yaw:'요'};
 const el=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
+export interface ControllerFrameSnapshot {
+  kind:InputDeviceKind|null;
+  rawAxes:number[]|null;
+  rawButtons:number[]|null;
+  normalized:Input|null;
+  mapping:Mapping|null;
+  browserMapping:string|null;
+  axesCount:number|null;
+  buttonsCount:number|null;
+}
 export class ControllerPanel {
   mapping=defaultMapping();
   private pad:Gamepad|null=null;
@@ -41,6 +52,19 @@ export class ControllerPanel {
     };
   }
   get inputDeviceKind():InputDeviceKind|null{return this.pad?deviceKind(this.pad):null;}
+  get frameSnapshot():ControllerFrameSnapshot {
+    const normalized=this.pad?readGamepad(this.pad,this.mapping):null;
+    return {
+      kind:this.pad?deviceKind(this.pad):null,
+      rawAxes:this.pad?Array.from(this.pad.axes):null,
+      rawButtons:this.pad?Array.from(this.pad.buttons,b=>b.value):null,
+      normalized:normalized?{...normalized}:null,
+      mapping:this.pad?structuredClone(this.mapping):null,
+      browserMapping:this.pad?this.pad.mapping:null,
+      axesCount:this.pad?this.pad.axes.length:null,
+      buttonsCount:this.pad?this.pad.buttons.length:null,
+    };
+  }
   private drawMapping() {
     const container=el('axis-settings');container.replaceChildren();
     for(const channel of CHANNELS) {
