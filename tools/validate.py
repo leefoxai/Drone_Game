@@ -31,8 +31,7 @@ def finite(value, path="value") -> None:
     if isinstance(value, bool) or value is None or isinstance(value, str):
         return
     if isinstance(value, (int, float)):
-        if not math.isfinite(value):
-            fail(f"{path}: non-finite number")
+        if not math.isfinite(value): fail(f"{path}: non-finite number")
         return
     if isinstance(value, list):
         for i, item in enumerate(value): finite(item, f"{path}[{i}]")
@@ -59,6 +58,15 @@ def classify(meta: dict, inputs: list[dict]) -> str:
 def require(meta: dict, keys: list[str]) -> None:
     for key in keys:
         if key not in meta: fail(f"metadata missing required field: {key}")
+
+def validate_camera_pose(pose, path: str) -> None:
+    if not isinstance(pose, dict): fail(f"{path}: camera pose missing")
+    for key in ["positionWorldM","orientationWorld","verticalFovRad","aspectRatio","nearM","farM"]:
+        if key not in pose: fail(f"{path}: missing {key}")
+    if len(pose["positionWorldM"]) != 3: fail(f"{path}: positionWorldM must have 3 elements")
+    if len(pose["orientationWorld"]) != 4: fail(f"{path}: orientationWorld must have 4 elements")
+    if pose["verticalFovRad"] <= 0 or pose["aspectRatio"] <= 0 or pose["nearM"] <= 0 or pose["farM"] <= pose["nearM"]: fail(f"{path}: invalid camera projection")
+    finite(pose, path)
 
 def validate(path: Path) -> dict:
     try:
@@ -95,6 +103,7 @@ def validate(path: Path) -> dict:
     if meta["track"]["sha256"] != hash_value(meta["track"]["snapshot"]): fail("track SHA-256 mismatch")
     if meta["ruleset"]["sha256"] != hash_value(meta["ruleset"]["snapshot"]): fail("ruleset SHA-256 mismatch")
     if meta["aircraftProfile"]["sha256"] != hash_value(meta["aircraftProfile"]["snapshot"]): fail("aircraftProfile SHA-256 mismatch")
+    if meta["camera"].get("renderPoseAtStart") is not None: validate_camera_pose(meta["camera"]["renderPoseAtStart"], "metadata.camera.renderPoseAtStart")
     payload_text = "\n".join(raw_lines[1:]) + ("\n" if len(raw_lines) > 1 else "")
     if hashlib.sha256(payload_text.encode("utf-8")).hexdigest() != meta["payloadSha256"]: fail("payload SHA-256 mismatch")
 
@@ -123,6 +132,7 @@ def validate(path: Path) -> dict:
         if i and frame["inputReadMonotonicMs"] < frames[i-1]["inputReadMonotonicMs"]: fail("input-read timestamps are not monotonic")
         if meta["inputDeviceKind"] == "keyboard" and frame.get("keysDown") is None: fail(f"frames[{i}] keyboard keysDown missing")
         if meta["inputDeviceKind"] != "keyboard" and frame.get("rawAxes") is None: fail(f"frames[{i}] joystick rawAxes missing")
+        if frame.get("cameraPose") is not None: validate_camera_pose(frame["cameraPose"], f"frames[{i}].cameraPose")
     for i, event in enumerate(events):
         if event["sequence"] != i: fail(f"events[{i}] sequence mismatch")
     if not any(e["type"] == "lap_start" for e in events): fail("lap_start event missing")
