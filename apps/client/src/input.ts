@@ -1,16 +1,16 @@
 import { clamp } from '../../../packages/physics/src/index';
 import type { Input } from '../../../packages/physics/src/index';
 export type Channel = keyof Input;
-export type InputDeviceKind = 'controller' | 'gamepad';
+export type InputDeviceKind = 'rc_joystick' | 'gamepad';
 export const CHANNELS: Channel[] = ['throttle','roll','pitch','yaw'];
-export const DEFAULT_DEADZONE:Record<InputDeviceKind,number>={controller:.01,gamepad:.05};
+export const DEFAULT_DEADZONE:Record<InputDeviceKind,number>={rc_joystick:.01,gamepad:.05};
 export interface AxisConfig { axis: number; invert: boolean; min: number; center: number; max: number; deadzone: number }
 export type Mapping = Record<Channel, AxisConfig>;
 export const STORAGE_KEY = 'drone.input.v1';
-export function deviceKind(pad:Pick<Gamepad,'mapping'>):InputDeviceKind{return pad.mapping==='standard'?'gamepad':'controller';}
+export function deviceKind(pad:Pick<Gamepad,'mapping'>):InputDeviceKind{return pad.mapping==='standard'?'gamepad':'rc_joystick';}
 export function defaultMapping(kind:InputDeviceKind='gamepad'): Mapping {
   const deadzone=DEFAULT_DEADZONE[kind];
-  // Standard gamepad mode 2. Non-standard USB devices are treated as RC-style controllers.
+  // Standard gamepad mode 2. Non-standard USB devices are treated as RC-style joysticks.
   return {
     throttle:{axis:1,invert:true,min:-1,center:0,max:1,deadzone},
     roll:{axis:2,invert:true,min:-1,center:0,max:1,deadzone},
