@@ -4,23 +4,22 @@
 
 ## 현재 단계
 
-M0 완료. **M1 비행 프로토타입 및 안정화 완료.**
-M2 기록·고스트는 아직 시작하지 않았다.
-
-이번 변경은 M1 코어를 다시 여는 것이 아니라 **현재 제품 공개 정책과 학습 데이터 용도 규칙을 추가한 상태**다.
-최신 GitHub Actions에서 전체 `npm test`와 Pages 배포까지 성공했다.
+- M0 완료.
+- M1 비행 프로토타입 및 안정화 완료.
+- **M2 기록·고스트 구현 및 자동 검증 완료. 사용자 직접 완료 확인 대기.**
+- M3 파이프라인 시험은 아직 시작하지 않았다.
 
 ## 현재 공개 제품 방향
 
-기본 배포 URL에서는 다음만 공개한다.
+기본 배포 URL:
 
-- `keyboard`
+- keyboard
 - Easy / assisted
-- 두 트랙
+- `training-five-v2`, `race-five-v2`
 - 3인칭 / FPV
 - 인공 수평선 / 높이 차 보조
 
-다음 기능은 삭제하지 않고 `?tester=1`에서만 활성화한다.
+`?tester=1`에서만 활성:
 
 - Acro
 - Gamepad
@@ -28,126 +27,244 @@ M2 기록·고스트는 아직 시작하지 않았다.
 - 축 보정/반전/끝점/deadzone
 - Rates 설정
 
-기본 모드에서는 관련 UI가 보이지 않으며, 저장된 조종기 설정이나 UI change 우회로 Acro/Gamepad를 활성화하지 못하게 런타임에서도 Easy + keyboard를 강제한다.
-`?tester=1`은 인증이 아니라 초대 테스터용 기능 플래그다.
+코드는 삭제하지 않았다. `?tester=1`은 인증이 아니라 테스터용 기능 플래그다.
 
-## 기록 및 학습 용도 정책
-
-기록 계약은 기존 M1 `telemetry.ts`와 `docs/data_spec.md`를 확장해 사용한다. 별도 형식을 만들지 않았다.
-현재 스키마는 **0.1.5**다.
-
-원본 유효 랩은 `training_use`와 관계없이 모두 보존한다.
-`training_use`는 원본 삭제 기준이 아니라 학습 용도 라벨이다.
-
-### 파티션 키
-
-최소 다음 조건을 포함한다.
-
-- track ID
-- control mode
-- `inputDeviceKind`: `keyboard` / `gamepad` / `rc_joystick`
-- `physicsVersion`
-- aircraft profile version
-- assist version
-- camera mode
-- artificial horizon enabled
-- height assist enabled
-- tester mode
-
-따라서 키보드/조이스틱 랩과 서로 다른 physics version의 랩이 같은 파티션에 섞이지 않는다.
-
-### training_use
-
-`classifyTrainingUse()` 하나를 단일 판정 기준으로 사용한다.
-
-- `stick_pattern`: `gamepad` 또는 `rc_joystick` + Acro + assist 없음 + 모든 tick에서 `pilotInput === appliedInput`
-- `flight_method`: 그 밖의 모든 유효 랩
-
-따라서 다음은 모두 `flight_method`다.
-
-- keyboard + Easy
-- keyboard + Acro
-- gamepad + Easy
-- rc_joystick + Easy
-
-`stick_pattern` 내보내기는 라벨만 신뢰하지 않고 동일 판정 함수를 다시 적용해 `flight_method` 랩 유입을 차단한다.
-원본 배열 자체는 변경하거나 삭제하지 않는다.
-
-### Easy assist targets
-
-Easy에서는 기존 assist 동작을 바꾸지 않고 매 physics tick에 다음 목표값을 추가 기록한다.
-
-- `horizontalVelocityWorldMps: [vx, vz]`
-- `verticalVelocityMps`
-- `yawRateRadPerSec`
-
-`flight_method` 학습에서는 궤적·속도 및 이 목표값을 사용할 수 있고, Easy의 `appliedInput`을 사람의 직접 스틱 패턴 정답으로 취급하지 않는다.
-
-### tester 기록
-
-- `testerMode`를 텔레메트리/파티션에 포함
-- `testerMode=true` 랩은 향후 공개 리더보드 대상에서 제외
-- 원본 보존 및 학습 용도 분류와 공개 순위 자격은 별개
-
-## M1 기반 버전
+## 버전
 
 - `PHYSICS_VERSION=3`
 - aircraft profile version 2
 - `training-five-v2`
 - `race-five-v2`
 - `ASSIST_VERSION=1`
-- `schema_version=0.1.5`
+- **recording schema `0.1.6`**
+- recording container `drone-lap-jsonl-gzip-v1`
 
-## 자동 검증 범위
+## M2 기록
 
-기존 M1 테스트를 삭제하지 않고 다음을 추가/변경했다.
+기존 M1 `telemetry.ts`와 `data_spec`의 필드·partition·training_use를 확장했다. 별도 학습 기록 형식을 만들지 않았다.
 
-- 공개 URL에서 Acro/Input source/조종기 보정/Rates UI 숨김
-- 공개 URL에서 Easy + keyboard 강제 및 UI change 우회 차단
-- `?tester=1`에서 기존 Acro/Gamepad/RC/보정/Rates 기능 복원
-- 기존 Acro 물리/rates 테스트 유지
-- 기존 Gamepad/RC 보정 테스트 유지
-- 입력 장치 종류별 파티션 분리
-- physics version별 파티션 분리
-- tester/public 파티션 분리
-- keyboard Acro가 `stick_pattern`으로 분류되지 않음
-- gamepad/RC + Easy가 `stick_pattern`으로 분류되지 않음
-- gamepad/RC + Acro 직접 입력만 `stick_pattern`
-- Easy assist 목표 속도/요율 기록
-- 기존 `assistedInput()`과 새 telemetry 노출 경로의 applied input 동일성
-- stick_pattern 내보내기에서 flight_method 강제 제외
-- tester 랩 공개 순위 제외 규칙
+### 매 render frame
 
-## 최신 검증
+랩 recorder 활성 중 다음을 기록한다.
 
-- [x] 전체 `npm test` 통과
-- [x] 공개 모드 Easy + keyboard E2E 통과
-- [x] tester 모드 Acro/Gamepad/RC E2E 통과
-- [x] training_use/assist target/export 규칙 테스트 통과
-- [x] GitHub Pages production build 성공
-- [x] GitHub Pages deploy 성공
+- `frameSequence`
+- 현재 simulation tick / physics alpha
+- input read monotonic timestamp
+- rAF timestamp
+- `inputDeviceKind`
+- keyboard: `keysDown` + normalized pilot input
+- gamepad/RC: raw axes/buttons + normalized pilot input
 
-검증 기준 커밋: `8f23d4ecc4d69e7b46b801924d4599d375969989`
-GitHub Actions run: `36214326934`
+### 매 physics tick
 
-## M1 완료 이력
+- 사람 입력 `pilotInput`
+- 실제 적용 입력 `appliedInput`
+- Easy `assistTargets`
+- full physics state
+- PID integral/filter/motors/battery 등을 포함한 controller hidden state
 
-- [x] M1 기존 자동 테스트/배포 게이트 통과
-- [x] `training-five-v2` 배포 실행 확인
-- [x] `race-five-v2` 배포 실행 확인
-- [x] 대회용 트랙 3인칭에서 사용자가 게이트 높이 판단 가능 확인
-- [x] 대회용 트랙 FPV에서 사용자가 게이트 높이 판단 가능 확인
+N input ↔ N+1 state를 강제한다.
 
-**M1 완료 판정: 2026-09-26.**
+### 이벤트
 
-## 다음 단계
+- lap start
+- gate pass
+- collision
+- lap complete
+- lap abort
 
-1. M2 · 기록/고스트로 진행한다.
-2. Acro 공개는 ROADMAP의 별도 조건부 마일스톤 기준을 만족할 때 진행한다.
+### metadata
+
+`data_spec.md 0.1.6`의 필수 항목을 recording metadata에 포함한다.
+
+- recording/session ID, UTC
+- track/ruleset/profile snapshot + SHA-256
+- rates / device mapping / display
+- physics/control profile
+- tester/public leaderboard/training use
+- initial state / environment
+- camera/practice assist
+- client build/runtime
+- consent snapshot
+- outcome
+- partition key
+- payload SHA-256
+
+M2 consent 기본값은 미동의다. 로컬 원본 저장과 학습 데이터셋 사용 동의는 별개다.
+
+## 파일 및 로컬 저장
+
+한 랩 = 한 파일:
+
+```text
+lap_<recording_id>.jsonl.gz
+```
+
+첫 line metadata + 기존 논리 채널(`frames`, `inputs`, `states`, `controller_states`, `events`, `camera_changes`)을 `channel` tag로 multiplex한다.
+
+로컬 저장:
+
+```text
+IndexedDB: drone-recordings
+Object store: laps
+```
+
+`localStorage`는 랩 원본 저장에 사용하지 않는다. 기존 controller calibration 저장에는 계속 사용한다.
+
+로컬 기록 화면 기능:
+
+- 목록
+- ghost 재생
+- gzip JSONL 내보내기
+- 삭제
+
+## 고스트
+
+현재 partition과 정확히 같은 **유효 complete 최고랩**을 자동 선택할 수 있다.
+
+두 방식:
+
+1. recorded state replay
+2. authoritative applied input re-simulation
+
+반투명 ghost drone으로 표시하고, recorded-state ↔ re-simulation의 현재/최대 position error를 화면에 표시한다.
+
+현재 re-simulation 지원 physics version은 3이다. 지원하지 않는 physics version은 최신 physics로 조용히 대체하지 않는다.
+
+## 재시뮬레이션 허용 오차
+
+현재 deterministic fixture 3개 기준:
+
+```text
+position <= 1e-9 m
+velocity <= 1e-9 m/s
+orientation <= 1e-10
+angular velocity <= 1e-9 rad/s
+```
+
+Fixture:
+
+1. keyboard + Easy + training → `flight_method`
+2. keyboard + Easy + race → `flight_method`
+3. rc_joystick + Acro + tester → `stick_pattern`
+
+세 fixture 모두 gzip JSONL round-trip → `tools/validate.py` → authoritative input re-simulation을 통과한다.
+
+## training_use / partition
+
+M1 규칙을 그대로 사용한다.
+
+`stick_pattern`:
+
+- gamepad 또는 rc_joystick
+- Acro
+- assist 없음
+- 모든 tick에서 pilotInput === appliedInput
+
+그 밖의 유효 랩은 `flight_method`다.
+
+partition 최소 구성:
+
+- track
+- control mode
+- input device kind
+- physics version
+- profile version
+- assist version
+- camera mode
+- artificial horizon
+- height assist
+- tester mode
+
+원본은 training_use와 관계없이 보존한다. tester 기록은 향후 공개 leaderboard 대상에서 제외한다.
+
+## validator
+
+```bash
+python3 tools/validate.py lap_<recording_id>.jsonl.gz
+```
+
+검사 범위:
+
+- gzip / UTF-8 / JSONL
+- 필수 metadata
+- snapshot/payload SHA-256
+- finite values
+- tick/sequence 연속성
+- N input / N+1 state
+- Easy assist target
+- frame raw/normalized input
+- event terminal 상태
+- partition key
+- training_use 재판정
+- tester/public ranking 규칙
+
+Python에 physics를 복제하지 않는다. physics correctness는 shared TypeScript `step()` 재시뮬레이션 테스트가 담당한다.
+
+## 자동 검증
+
+M2 첫 green CI 기준으로 다음 **34 tests**가 통과했다.
+
+- 기존 M1 physics/rates/determinism/track/collision tests
+- public Easy + keyboard E2E
+- tester Acro/Gamepad/RC calibration E2E
+- training_use / partition / Easy assist targets
+- M2 gzip JSONL codec
+- sample recording 3개 Python validator
+- sample recording 3개 input re-simulation
+- IndexedDB persistence after reload
+- same-partition best ghost load
+- state/resim ghost mode UI
+
+Green CI 기준 commit: `34742d11019d5dfd701f89298a3d3e9f79f62da4`
+GitHub Actions run: `36219270147`
+
+이후 문서/data_spec 0.1.6 갱신 커밋에도 동일 CI 게이트를 계속 적용한다.
+
+## 기록 용량
+
+계획 기준:
+
+| 랩 | 비압축 | gzip |
+|---:|---:|---:|
+| 30초 | 7–10 MB | 1.5–3.5 MB |
+| 60초 | 14–20 MB | 3–7 MB |
+| 90초 | 21–30 MB | 4.5–10 MB |
+
+현재 자동 fixture는 2초 길이의 correctness fixture라 실제 장시간 저장 용량 benchmark로 사용하지 않는다. 30/60/90초 실측과 IndexedDB quota 평가는 M3에서 수행한다.
+
+## M2 완료 조건
+
+자동 조건:
+
+- [x] IndexedDB 기록
+- [x] gzip JSON Lines export 구조
+- [x] data_spec 0.1.6
+- [x] Python validator
+- [x] 3개 재시뮬레이션 regression
+- [x] recorded-state ghost
+- [x] input-resimulation ghost
+- [x] position error UI
+- [x] local list/replay/delete/export UI
+- [x] 기존 public/tester 기능 회귀 통과
+- [x] CI test gate 통과
+
+사용자 직접 확인 대기:
+
+- [ ] 배포 사이트에서 한 랩 완주 후 기록이 목록에 남음
+- [ ] 새로고침 후 기록 유지
+- [ ] 현재 조건 최고랩 ghost와 실제 경주 가능
+- [ ] state/resim 전환과 position error 표시 확인
+- [ ] `.jsonl.gz` 내보내기
+- [ ] 내보낸 파일이 로컬 `python3 tools/validate.py ...` 통과
+
+위 직접 확인까지 끝나면 M2를 최종 완료로 판정한다.
 
 ## 알려진 한계
 
-- `?tester=1`은 인증/권한 제어가 아니다.
-- 실제 USB 조종기/게임패드의 모든 하드웨어 호환성은 자동 테스트로 대체할 수 없다.
-- M1 telemetry는 세션 메모리 수준이며 파일 저장·고스트·재시뮬레이션은 M2 범위다.
-- 서버 업로드·계정·공개 리더보드는 아직 구현하지 않았다. `publicLeaderboardEligible`는 M4 서버 구현 시 반드시 서버에서도 검증해야 한다.
+- 브라우저별 IndexedDB quota는 다르다. 장시간/다량 기록 한도는 M3에서 측정한다.
+- 현재 input re-simulation은 physics v3만 지원한다.
+- M2 파일은 검증과 개발 편의를 위해 JSONL을 사용한다. 대량 데이터 압축/이진화 여부는 M3 측정 후 결정한다.
+- 실제 RC/Gamepad 하드웨어 호환성은 자동 테스트로 완전히 대체할 수 없다.
+- `?tester=1`은 인증이 아니다.
+- 서버 업로드, 계정, 공개 leaderboard, 동의 UI는 M4 범위다.
