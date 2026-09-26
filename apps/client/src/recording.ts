@@ -9,6 +9,7 @@ import type { CameraSnapshot, ControlContext, InputRecord, TrainingUse } from '.
 import type { Mapping } from './input';
 import { getCurrentCameraPose } from './camera-telemetry';
 import type { RenderCameraPose } from './camera-telemetry';
+import { loadTrainingConsent, trainingConsentSnapshot } from './consent';
 
 export const SCHEMA_VERSION = '0.1.6';
 export const RECORDING_FORMAT = 'drone-lap-jsonl-gzip-v1';
@@ -113,6 +114,13 @@ export interface RecorderMetadataSource {
   sessionId: string;
 }
 
+type ConsentSnapshot=RecordingMetadata['consent'];
+type ConsentProvider=()=>ConsentSnapshot;
+function browserConsentSnapshot():ConsentSnapshot {
+  if(typeof localStorage==='undefined')return {granted:false,scope:[],policyVersion:null,grantedAtUtc:null};
+  return trainingConsentSnapshot(loadTrainingConsent(localStorage));
+}
+
 const encoder = new TextEncoder();
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -133,7 +141,6 @@ function controllerState(state:State):ControllerStateRecord {
 }
 function cameraExtrinsics(camera:CameraSnapshot):Pick<RecordingMetadata['camera'],'relativePositionM'|'relativeOrientation'> {
   if(camera.cameraMode==='fpv')return {relativePositionM:[0,.035,-.17],relativeOrientation:null};
-  // Chase uses a world-up/look-at model rather than one fixed body-relative quaternion.
   return {relativePositionM:[0,.38,3.2],relativeOrientation:null};
 }
 
@@ -148,11 +155,15 @@ export class M2LapRecorder {
   private eventSequence=0;
   private frameSequence=0;
   private initialRenderPose:RenderCameraPose|null=null;
+  private lapConsent:ConsentSnapshot={granted:false,scope:[],policyVersion:null,grantedAtUtc:null};
+
+  constructor(private readonly consentProvider:ConsentProvider=browserConsentSnapshot){}
 
   get active(){return this.source!==null;}
   begin(source:RecorderMetadataSource){
     if(this.active)return;
     this.source=structuredClone(source);
+    this.lapConsent=structuredClone(this.consentProvider());
     this.initialRenderPose=getCurrentCameraPose();
     this.states=[{tick:source.initialState.tick,state:copyState(source.initialState)}];
     this.controllers=[controllerState(source.initialState)];
@@ -174,13 +185,13 @@ export class M2LapRecorder {
   event(tick:number,type:EventType,payload:Record<string,unknown>={}){if(this.active)this.events.push({tick,sequence:this.eventSequence++,type,payload:structuredClone(payload)});}
   async finish(status:LapOutcome,seconds:number|null,completedGates:number,reason:string|null):Promise<FullLapRecording|null>{
     if(!this.source)return null;
-    const source=this.source,renderPoseAtStart=this.initialRenderPose;
+    const source=this.source,renderPoseAtStart=this.initialRenderPose,consent=structuredClone(this.lapConsent);
     const frames=this.frames.map(v=>structuredClone(v)),inputs=this.inputs.map(v=>structuredClone(v)),states=this.states.map(v=>structuredClone(v));
     const controllerStates=this.controllers.map(v=>structuredClone(v)),events=this.events.map(v=>structuredClone(v)),cameraChanges=this.cameras.map(v=>structuredClone(v));
     const finalTick=states.at(-1)!.tick;
     const terminalType:EventType=status==='complete'?'lap_complete':'lap_abort';
     events.push({tick:finalTick,sequence:this.eventSequence++,type:terminalType,payload:{status,reason}});
-    this.source=null;this.initialRenderPose=null;this.frames=[];this.inputs=[];this.states=[];this.controllers=[];this.events=[];this.cameras=[];this.eventSequence=0;this.frameSequence=0;
+    this.source=null;this.initialRenderPose=null;this.frames=[];this.inputs=[];this.states=[];this.controllers=[];this.events=[];this.cameras=[];this.eventSequence=0;this.frameSequence=0;this.lapConsent={granted:false,scope:[],policyVersion:null,grantedAtUtc:null};
 
     const partitionKey=dataPartitionKey(source.context),trainingUse=classifyTrainingUse(source.context,inputs);
     const trackSnapshot=structuredClone(source.track),profileSnapshot=structuredClone(source.profile);
@@ -199,12 +210,12 @@ export class M2LapRecorder {
       controlProfile:{mode:source.context.controlMode,assistVersion:source.context.assistVersion,assistSettings:source.context.controlMode==='assisted'?structuredClone(ASSIST_SETTINGS):null},
       seed:0,prng:'none',initialState:copyState(source.initialState),environment:{gravityWorldMps2:[0,-G,0],windWorldMps:[0,0,0]},
       camera:{...structuredClone(source.camera),nearM:renderPoseAtStart?.nearM??.025,farM:renderPoseAtStart?.farM??220,...cameraDetails,renderPoseAtStart},practiceAssist:{heightAssistEnabled:source.context.heightAssistEnabled},
-      clientBuild:source.clientBuild,runtime:structuredClone(source.runtime),consent:{granted:false,scope:[],policyVersion:null,grantedAtUtc:null},
+      clientBuild:source.clientBuild,runtime:structuredClone(source.runtime),consent,
       outcome:{status,finalTick,seconds,completedGates,reason},
     };
     return {metadata,frames,inputs,states,controllerStates,events,cameraChanges};
   }
-  cancel(){this.source=null;this.initialRenderPose=null;this.frames=[];this.inputs=[];this.states=[];this.controllers=[];this.events=[];this.cameras=[];}
+  cancel(){this.source=null;this.initialRenderPose=null;this.frames=[];this.inputs=[];this.states=[];this.controllers=[];this.events=[];this.cameras=[];this.lapConsent={granted:false,scope:[],policyVersion:null,grantedAtUtc:null};}
 }
 
 export interface ResimulationResult { states:StateRecord[]; maxPositionErrorM:number; maxVelocityErrorMps:number; maxOrientationError:number; maxAngularVelocityErrorRadS:number }
