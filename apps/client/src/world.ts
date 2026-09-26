@@ -83,62 +83,46 @@ export function createWorld(canvas: HTMLCanvasElement, initialTrack:Track) {
   }
   setTrack(initialTrack);
 
-  const drone=new THREE.Group();drone.userData.visualRadius=DRONE_VISUAL_RADIUS_M;
-  drone.add(box(.09,.055,.15,'#1b2530'));
-  const battery=box(.065,.04,.11,'#ffac64');battery.position.y=.04;drone.add(battery);
-  const motorOffset=.127;
-  for(const angle of [-Math.PI/4,Math.PI/4]) {const arm=box(.36,.018,.022,'#25353e');arm.rotation.y=angle;drone.add(arm);}
-  const props: THREE.Mesh[]=[];
-  for(const x of [-motorOffset,motorOffset]) for(const z of [-motorOffset,motorOffset]) {
-    const motor=new THREE.Mesh(new THREE.CylinderGeometry(.019,.019,.03,12),new THREE.MeshStandardMaterial({color:'#889b9c'}));motor.position.set(x,.02,z);motor.castShadow=true;drone.add(motor);
-    const prop=box(.08,.004,.012,z<0?'#77ece0':'#ffb372');prop.position.set(x,.039,z);drone.add(prop);props.push(prop);
-    const disk=new THREE.Mesh(new THREE.CircleGeometry(.04,24),new THREE.MeshStandardMaterial({color:z<0?'#77ece0':'#ffb372',transparent:true,opacity:.3,side:THREE.DoubleSide,depthWrite:false}));disk.rotation.x=-Math.PI/2;disk.position.set(x,.04,z);disk.castShadow=true;drone.add(disk);
+  function buildDrone(materialFactory:(color:string)=>THREE.Material){
+    const group=new THREE.Group();
+    const addBox=(w:number,h:number,d:number,color:string)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),materialFactory(color));group.add(mesh);return mesh;};
+    addBox(.09,.055,.15,'#1b2530');const battery=addBox(.065,.04,.11,'#ffac64');battery.position.y=.04;
+    const motorOffset=.127;
+    for(const angle of [-Math.PI/4,Math.PI/4]){const arm=addBox(.36,.018,.022,'#25353e');arm.rotation.y=angle;}
+    const props:THREE.Mesh[]=[];
+    for(const x of [-motorOffset,motorOffset])for(const z of [-motorOffset,motorOffset]){
+      const motor=new THREE.Mesh(new THREE.CylinderGeometry(.019,.019,.03,12),materialFactory('#889b9c'));motor.position.set(x,.02,z);group.add(motor);
+      const prop=addBox(.08,.004,.012,z<0?'#77ece0':'#ffb372');prop.position.set(x,.039,z);props.push(prop);
+    }
+    const front=addBox(.025,.025,.02,'#6ce9dd');front.position.set(0,0,-.085);
+    return {group,props};
   }
-  const front=box(.025,.025,.02,'#6ce9dd');front.position.set(0,0,-.085);drone.add(front);scene.add(drone);
-  canvas.dataset.droneVisualRadius=String(DRONE_VISUAL_RADIUS_M);
-  canvas.dataset.droneCollisionRadius=String(DRONE_COLLISION_RADIUS_M);
-  canvas.dataset.realShadows='true';
-  canvas.dataset.scaleCones='4';canvas.dataset.scaleFlags='2';
+  const player=buildDrone(color=>new THREE.MeshStandardMaterial({color,roughness:.75}));
+  const drone=player.group;drone.userData.visualRadius=DRONE_VISUAL_RADIUS_M;drone.traverse(child=>{if(child instanceof THREE.Mesh)child.castShadow=true;});scene.add(drone);
+  const ghostBuild=buildDrone(color=>new THREE.MeshBasicMaterial({color,transparent:true,opacity:.34,depthWrite:false}));
+  const ghost=ghostBuild.group;ghost.visible=false;ghost.renderOrder=2;ghost.userData.ghost=true;scene.add(ghost);
+  canvas.dataset.droneVisualRadius=String(DRONE_VISUAL_RADIUS_M);canvas.dataset.droneCollisionRadius=String(DRONE_COLLISION_RADIUS_M);canvas.dataset.realShadows='true';canvas.dataset.scaleCones='4';canvas.dataset.scaleFlags='2';
 
   const currentPosition=new THREE.Vector3(), currentQuaternion=new THREE.Quaternion(), oldQuaternion=new THREE.Quaternion();
-  const tiltQuaternion=new THREE.Quaternion(), offset=new THREE.Vector3();
-  let first=true;
-  function resize() {
-    renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight,false);
-    camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
-  }
-  function horizonLine():HorizonLine|null {
-    const inv=camera.quaternion.clone().invert();
-    const normal=new THREE.Vector3(0,1,0).applyQuaternion(inv);
-    if(Math.abs(normal.y)<1e-5)return null;
-    const tanV=Math.tan(THREE.MathUtils.degToRad(camera.fov)/2),tanH=tanV*camera.aspect;
-    const ndcY=(x:number)=>(normal.z-normal.x*x*tanH)/(normal.y*tanV);
+  const tiltQuaternion=new THREE.Quaternion(), offset=new THREE.Vector3();let first=true;
+  function resize(){renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+  function horizonLine():HorizonLine|null{
+    const inv=camera.quaternion.clone().invert(),normal=new THREE.Vector3(0,1,0).applyQuaternion(inv);if(Math.abs(normal.y)<1e-5)return null;
+    const tanV=Math.tan(THREE.MathUtils.degToRad(camera.fov)/2),tanH=tanV*camera.aspect;const ndcY=(x:number)=>(normal.z-normal.x*x*tanH)/(normal.y*tanV);
     return {leftY:(1-ndcY(-1))*0.5,rightY:(1-ndcY(1))*0.5};
   }
   resize();window.addEventListener('resize',resize);
   return {
-    render(previous:State,current:State,alpha:number,mode:'chase'|'fpv',tilt:number,fov:number,nextGate:number,elapsed:number) {
-      currentPosition.fromArray(previous.position).lerp(new THREE.Vector3(...current.position),alpha);
-      oldQuaternion.fromArray(previous.orientation);currentQuaternion.fromArray(current.orientation);oldQuaternion.slerp(currentQuaternion,alpha);
-      drone.position.copy(currentPosition);drone.quaternion.copy(oldQuaternion);
-      props.forEach((prop,i)=>{prop.rotation.y+=elapsed*current.motors[i]!*300;});
+    render(previous:State,current:State,alpha:number,mode:'chase'|'fpv',tilt:number,fov:number,nextGate:number,elapsed:number){
+      currentPosition.fromArray(previous.position).lerp(new THREE.Vector3(...current.position),alpha);oldQuaternion.fromArray(previous.orientation);currentQuaternion.fromArray(current.orientation);oldQuaternion.slerp(currentQuaternion,alpha);
+      drone.position.copy(currentPosition);drone.quaternion.copy(oldQuaternion);player.props.forEach((prop,i)=>{prop.rotation.y+=elapsed*current.motors[i]!*300;});
       gateMaterials.forEach((m,i)=>{m.color.set(i===nextGate?'#ffc47b':'#7fe0d4');m.emissive.set(i===nextGate?'#b87327':'#286858');});
-      if(mode==='fpv') {
-        camera.position.copy(currentPosition).add(offset.set(0,.035,-.17).applyQuaternion(oldQuaternion));
-        tiltQuaternion.setFromAxisAngle(new THREE.Vector3(1,0,0),tilt*Math.PI/180);
-        camera.quaternion.copy(oldQuaternion).multiply(tiltQuaternion);
-      } else {
-        const direction=new THREE.Vector3(0,0,-1).applyQuaternion(oldQuaternion);direction.y=0;
-        if(direction.lengthSq()<.001) direction.set(0,0,-1);direction.normalize();
-        const desired=currentPosition.clone().addScaledVector(direction,-3.2).add(new THREE.Vector3(0,.38,0));
-        if(first)camera.position.copy(desired);else camera.position.lerp(desired,1-Math.exp(-elapsed*8));
-        camera.lookAt(currentPosition.clone().addScaledVector(direction,2).add(new THREE.Vector3(0,.06,0)));
-      }
-      first=false;camera.fov=fov;camera.updateProjectionMatrix();renderer.render(scene,camera);canvas.dataset.rendered='true';canvas.dataset.cameraMode=mode;
-      return horizonLine();
+      if(mode==='fpv') {camera.position.copy(currentPosition).add(offset.set(0,.035,-.17).applyQuaternion(oldQuaternion));tiltQuaternion.setFromAxisAngle(new THREE.Vector3(1,0,0),tilt*Math.PI/180);camera.quaternion.copy(oldQuaternion).multiply(tiltQuaternion);}
+      else {const direction=new THREE.Vector3(0,0,-1).applyQuaternion(oldQuaternion);direction.y=0;if(direction.lengthSq()<.001)direction.set(0,0,-1);direction.normalize();const desired=currentPosition.clone().addScaledVector(direction,-3.2).add(new THREE.Vector3(0,.38,0));if(first)camera.position.copy(desired);else camera.position.lerp(desired,1-Math.exp(-elapsed*8));camera.lookAt(currentPosition.clone().addScaledVector(direction,2).add(new THREE.Vector3(0,.06,0)));}
+      first=false;camera.fov=fov;camera.updateProjectionMatrix();renderer.render(scene,camera);canvas.dataset.rendered='true';canvas.dataset.cameraMode=mode;return horizonLine();
     },
-    setTrack(track:Track){setTrack(track);first=true;},
-    resetCamera(){first=true;},
+    setGhostState(state:State|null){if(!state){ghost.visible=false;canvas.dataset.ghostVisible='false';return;}ghost.visible=true;ghost.position.fromArray(state.position);ghost.quaternion.fromArray(state.orientation);canvas.dataset.ghostVisible='true';},
+    setTrack(track:Track){setTrack(track);first=true;},resetCamera(){first=true;},
     dispose(){window.removeEventListener('resize',resize);disposeObject(scene);renderer.dispose();},
   };
 }
