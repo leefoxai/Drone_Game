@@ -9,16 +9,18 @@ import { TRAINING_TRACK, RACE_TRACK } from '../packages/physics/src/track';
 import { cameraSnapshot } from '../packages/physics/src/telemetry';
 import type { ControlContext, InputDeviceKind } from '../packages/physics/src/telemetry';
 import { defaultMapping } from '../apps/client/src/input';
+import { setCurrentCameraPose } from '../apps/client/src/camera-telemetry';
 import { M2LapRecorder, recordingWithinTolerance, resimulateRecording } from '../apps/client/src/recording';
 import type { FullLapRecording } from '../apps/client/src/recording';
 import { decodeRecording, encodeRecording } from '../apps/client/src/recording-codec';
 
 const profile=structuredClone(profileJson) as Profile;
 const camera=cameraSnapshot(75,1280,720,1,'chase',false,true);
+const renderPose={positionWorldM:[0,3.38,9.2] as [number,number,number],orientationWorld:[0,0,0,1] as [number,number,number,number],verticalFovRad:75*Math.PI/180,aspectRatio:16/9,nearM:.025,farM:220};
 
 async function fixture(name:string,kind:InputDeviceKind,mode:'assisted'|'acro',track=TRAINING_TRACK):Promise<FullLapRecording>{
   const context:ControlContext={trackId:track.id,controlMode:mode,aircraftProfileVersion:profile.version,assistVersion:mode==='assisted'?ASSIST_VERSION:null,physicsVersion:3,inputDeviceKind:kind,testerMode:kind!=='keyboard',cameraMode:'chase',artificialHorizonEnabled:false,heightAssistEnabled:true};
-  const recorder=new M2LapRecorder();const state=initialState(profile),initial=cloneState(state);
+  const recorder=new M2LapRecorder();const state=initialState(profile),initial=cloneState(state);setCurrentCameraPose(renderPose);
   recorder.begin({context,track,profile,initialState:initial,camera,inputDevice:{mapping:kind==='keyboard'?null:defaultMapping(kind==='rc_joystick'?'rc_joystick':'gamepad'),browserMapping:kind==='gamepad'?'standard':'',axesCount:kind==='keyboard'?null:4,buttonsCount:kind==='keyboard'?null:8},display:{refreshRateHzEstimate:60,renderFpsEstimate:60,viewportWidth:1280,viewportHeight:720,devicePixelRatio:1},runtime:{userAgent:'fixture',language:'ko-KR'},clientBuild:'fixture',sessionId:`session-${name}`});
   for(let i=0;i<480;i++){
     const pilot:Input=mode==='assisted'?{throttle:.5,roll:i<120?.3:0,pitch:i<240?-.45:0,yaw:i>300?.2:0}:{throttle:.42,roll:i<200?.22:0,pitch:-.12,yaw:.08};
@@ -46,9 +48,10 @@ test('샘플 랩 3개는 gzip JSONL round-trip과 입력 재시뮬레이션 허�
   rmSync('test-results/m2',{recursive:true,force:true});
 });
 
-test('M2 기록은 사람 입력, applied input, Easy assist targets, 상태 N+1을 보존한다',async()=>{
+test('M2 기록은 사람 입력, applied input, Easy assist targets, 상태 N+1과 렌더 카메라 pose를 보존한다',async()=>{
   const record=await fixture('contract','keyboard','assisted');
   expect(record.inputs).toHaveLength(480);expect(record.states).toHaveLength(481);expect(record.controllerStates).toHaveLength(481);expect(record.frames).toHaveLength(120);
   expect(record.inputs.every(v=>v.assistTargets!==null)).toBe(true);expect(record.frames[0]!.keysDown).not.toBeNull();
+  expect(record.frames.every(v=>v.cameraPose!==null)).toBe(true);expect(record.metadata.camera.renderPoseAtStart).toEqual(renderPose);
   expect(record.metadata.schemaVersion).toBe('0.1.6');expect(record.metadata.physicsVersion).toBe(3);expect(record.metadata.partitionKey).toContain('device-keyboard');expect(record.metadata.trainingUse).toBe('flight_method');
 });
