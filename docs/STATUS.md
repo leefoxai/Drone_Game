@@ -6,8 +6,10 @@
 
 - M0 완료.
 - M1 비행 프로토타입 및 안정화 완료.
-- **M2 기록·고스트 구현 및 자동 검증 완료. 사용자 직접 완료 확인 대기.**
+- **M2 기록·고스트 완료.**
 - M3 파이프라인 시험은 아직 시작하지 않았다.
+
+M2는 자동 테스트, GitHub Pages 배포, 사용자 직접 확인, 실제 내보낸 랩 파일의 `tools/validate.py` 검증까지 완료했다.
 
 ## 현재 공개 제품 방향
 
@@ -45,8 +47,6 @@
 
 ### 매 render frame
 
-랩 recorder 활성 중 다음을 기록한다.
-
 - `frameSequence`
 - 현재 simulation tick / physics alpha
 - input read monotonic timestamp
@@ -54,6 +54,7 @@
 - `inputDeviceKind`
 - keyboard: `keysDown` + normalized pilot input
 - gamepad/RC: raw axes/buttons + normalized pilot input
+- 실제 렌더 카메라 pose/projection
 
 ### 매 physics tick
 
@@ -117,6 +118,8 @@ Object store: laps
 - ghost 재생
 - gzip JSONL 내보내기
 - 삭제
+
+저장소의 사용자 원본 기록 보관 경로 `local_data/`는 `.gitignore`에 포함한다. 공개 Git 저장소에 실제 랩 파일을 커밋하지 않는다.
 
 ## 고스트
 
@@ -194,6 +197,7 @@ python3 tools/validate.py lap_<recording_id>.jsonl.gz
 - N input / N+1 state
 - Easy assist target
 - frame raw/normalized input
+- render camera pose/projection
 - event terminal 상태
 - partition key
 - training_use 재판정
@@ -203,7 +207,7 @@ Python에 physics를 복제하지 않는다. physics correctness는 shared TypeS
 
 ## 자동 검증
 
-M2 첫 green CI 기준으로 다음 **34 tests**가 통과했다.
+최신 M2 검증 기준에서 다음 **34 tests**가 통과했다.
 
 - 기존 M1 physics/rates/determinism/track/collision tests
 - public Easy + keyboard E2E
@@ -215,11 +219,33 @@ M2 첫 green CI 기준으로 다음 **34 tests**가 통과했다.
 - IndexedDB persistence after reload
 - same-partition best ghost load
 - state/resim ghost mode UI
+- exported frame camera pose 검증
 
-Green CI 기준 commit: `34742d11019d5dfd701f89298a3d3e9f79f62da4`
-GitHub Actions run: `36219270147`
+최신 기능 검증 commit: `86726dc1cf3207f1800bc31059d53b85e60f4bc1`
+GitHub Actions run: `36219879301`
 
-이후 문서/data_spec 0.1.6 갱신 커밋에도 동일 CI 게이트를 계속 적용한다.
+## 실제 사용자 export 검증
+
+2026-09-26 배포 사이트에서 사용자가 직접 완주 후 내보낸 다음 기록을 검사했다.
+
+```text
+recording_id: cb5233fa-e018-45ba-840a-bc838d51b3f5
+training_use: flight_method
+inputs: 6388
+states: 6389
+frames: 1596
+events: 7
+compressed_bytes: 3701889
+uncompressed_bytes: 13430610
+```
+
+`tools/validate.py` 결과:
+
+```text
+OK local_data/lap_cb5233fa-e018-45ba-840a-bc838d51b3f5.jsonl.gz
+```
+
+따라서 실제 배포 환경에서 생성된 기록도 schema 0.1.6 validator를 통과한다.
 
 ## 기록 용량
 
@@ -231,7 +257,7 @@ GitHub Actions run: `36219270147`
 | 60초 | 14–20 MB | 3–7 MB |
 | 90초 | 21–30 MB | 4.5–10 MB |
 
-현재 자동 fixture는 2초 길이의 correctness fixture라 실제 장시간 저장 용량 benchmark로 사용하지 않는다. 30/60/90초 실측과 IndexedDB quota 평가는 M3에서 수행한다.
+이번 실제 export는 약 13.43 MB 비압축, 약 3.70 MB gzip이었다. 30/60/90초 구간별 장시간 benchmark와 IndexedDB quota 평가는 M3에서 수행한다.
 
 ## M2 완료 조건
 
@@ -249,16 +275,17 @@ GitHub Actions run: `36219270147`
 - [x] 기존 public/tester 기능 회귀 통과
 - [x] CI test gate 통과
 
-사용자 직접 확인 대기:
+사용자 직접 확인:
 
-- [ ] 배포 사이트에서 한 랩 완주 후 기록이 목록에 남음
-- [ ] 새로고침 후 기록 유지
-- [ ] 현재 조건 최고랩 ghost와 실제 경주 가능
-- [ ] state/resim 전환과 position error 표시 확인
-- [ ] `.jsonl.gz` 내보내기
-- [ ] 내보낸 파일이 로컬 `python3 tools/validate.py ...` 통과
+- [x] 배포 사이트에서 한 랩 완주 후 기록이 목록에 남음
+- [x] 새로고침 후 기록 유지
+- [x] 현재 조건 최고랩 ghost와 실제 경주 가능
+- [x] state/resim 전환과 position error 표시 확인
+- [x] `.jsonl.gz` 내보내기
+- [x] 내보낸 실제 파일이 `tools/validate.py` 통과
 
-위 직접 확인까지 끝나면 M2를 최종 완료로 판정한다.
+**M2 완료 판정: 2026-09-26.**
+다음 개발 단계는 M3 · 파이프라인 시험과 기록 형식 확정이다.
 
 ## 알려진 한계
 
