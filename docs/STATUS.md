@@ -5,69 +5,137 @@
 ## 현재 단계
 
 M0 완료. **M1 비행 프로토타입 및 안정화 완료.**
-최신 자동 테스트·GitHub Actions·GitHub Pages 배포와 사용자 직접 시각 확인까지 완료했다.
 M2 기록·고스트는 아직 시작하지 않았다.
 
-## M1 완료 상태
+이번 변경은 M1 코어를 다시 여는 것이 아니라 **현재 제품 공개 정책과 학습 데이터 용도 규칙을 추가한 상태**다.
 
-- 훈련장 배치는 유지하고 트랙 ID/버전을 `training-five-v2`, version 2로 상승.
-- 대회용 트랙은 `race-five-v2`, version 2: 1.8 m × 1.8 m 게이트 5개, 높이 2.5~5 m 변화.
-- `PHYSICS_VERSION=3`: 게이트 프레임/지지대와 드론 충돌 크기의 의미를 화면 형상과 일치시킴.
-- 게이트 프레임 두께는 `GATE_FRAME_THICKNESS_M=0.22 m` 하나를 renderer/collision이 공동 사용.
-- 드론은 `DRONE_COLLISION_RADIUS_M=0.22 m`, 시각 기준 반경도 동일 상수 사용.
-- 모든 게이트에 지면까지 내려오는 좌우 지지대와 바닥 표시 추가. 지지대는 실제 충돌체.
-- DirectionalLight 기반 실제 그림자 활성화: 드론/게이트 castShadow, 지면 receiveShadow.
-- 크기 기준물: 0.5 m 콘 4개, 2.0 m 깃발 2개.
-- 3인칭 chase camera를 드론 높이에 가깝게 낮춤.
-- FPV 인공 수평선 추가. 카메라 자세/FPV tilt/vertical FOV/aspect ratio를 사용해 실제 world horizon을 투영하고 ON/OFF 가능.
-- 다음 게이트 높이 차 표시 추가: 훈련장 또는 Easy에서만 활성. 대회용 Acro에서는 비활성.
-- 시야/보조 상태 `cameraMode`, `artificialHorizonEnabled`, `heightAssistEnabled`를 텔레메트리 메타데이터와 학습 파티션 키에 포함.
-- `docs/data_spec.md` schema_version은 0.1.4.
-- 기체 프로파일은 version 2: 질량 0.62 kg, 모터당 최대 추력 15.2 N, 명목 T/W 약 10.0:1.
-- Acro 기본 rates: RC rate 1.0 / Super rate 0.7 / Expo 0, 최대 약 667°/s.
-- Easy 보조 로직은 `ASSIST_VERSION=1`. Acro 기본 FPV tilt 27°, Easy 기본 15°.
-- 장치별 기본 deadzone: 비표준 USB 조종기 1%, 표준 Gamepad 5%.
-- Easy는 매 물리 tick에 사람 입력(`pilotInput`)과 실제 물리 입력(`appliedInput`)을 둘 다 기록.
-- Easy/Acro 및 카메라/시각 보조 조건은 학습 데이터 파티션에서 분리.
-- GitHub Actions는 `npm ci` → Playwright Chromium 설치 → `npm test` → Pages용 재빌드 순서이며 테스트 실패 시 deploy하지 않음.
+## 현재 공개 제품 방향
 
-## M1 완료 게이트
+기본 배포 URL에서는 다음만 공개한다.
 
-- [x] 최신 커밋 기준 전체 `npm test` 통과
-- [x] GitHub Actions test-and-build 성공
-- [x] GitHub Pages deploy 성공
-- [x] 배포 사이트에서 `training-five-v2` 실행 확인
-- [x] 배포 사이트에서 `race-five-v2` 실행 확인
-- [x] 사용자 직접 확인: 대회용 트랙 3인칭에서 게이트 높이를 눈으로 가늠 가능
-- [x] 사용자 직접 확인: 대회용 트랙 FPV에서 게이트 높이를 눈으로 가늠 가능
+- `keyboard`
+- Easy / assisted
+- 두 트랙
+- 3인칭 / FPV
+- 인공 수평선 / 높이 차 보조
 
-**M1 완료 판정: 2026-09-26.**
-다음 개발 단계는 M2 · 기록·고스트다.
+다음 기능은 삭제하지 않고 `?tester=1`에서만 활성화한다.
+
+- Acro
+- Gamepad
+- RC joystick
+- 축 보정/반전/끝점/deadzone
+- Rates 설정
+
+기본 모드에서는 관련 UI가 보이지 않으며, 저장된 조종기 설정이나 UI change 우회로 Acro/Gamepad를 활성화하지 못하게 런타임에서도 Easy + keyboard를 강제한다.
+`?tester=1`은 인증이 아니라 초대 테스터용 기능 플래그다.
+
+## 기록 및 학습 용도 정책
+
+기록 계약은 기존 M1 `telemetry.ts`와 `docs/data_spec.md`를 확장해 사용한다. 별도 형식을 만들지 않았다.
+현재 스키마는 **0.1.5**다.
+
+원본 유효 랩은 `training_use`와 관계없이 모두 보존한다.
+`training_use`는 원본 삭제 기준이 아니라 학습 용도 라벨이다.
+
+### 파티션 키
+
+최소 다음 조건을 포함한다.
+
+- track ID
+- control mode
+- `inputDeviceKind`: `keyboard` / `gamepad` / `rc_joystick`
+- `physicsVersion`
+- aircraft profile version
+- assist version
+- camera mode
+- artificial horizon enabled
+- height assist enabled
+- tester mode
+
+따라서 키보드/조이스틱 랩과 서로 다른 physics version의 랩이 같은 파티션에 섞이지 않는다.
+
+### training_use
+
+`classifyTrainingUse()` 하나를 단일 판정 기준으로 사용한다.
+
+- `stick_pattern`: `gamepad` 또는 `rc_joystick` + Acro + assist 없음 + 모든 tick에서 `pilotInput === appliedInput`
+- `flight_method`: 그 밖의 모든 유효 랩
+
+따라서 다음은 모두 `flight_method`다.
+
+- keyboard + Easy
+- keyboard + Acro
+- gamepad + Easy
+- rc_joystick + Easy
+
+`stick_pattern` 내보내기는 라벨만 신뢰하지 않고 동일 판정 함수를 다시 적용해 `flight_method` 랩 유입을 차단한다.
+원본 배열 자체는 변경하거나 삭제하지 않는다.
+
+### Easy assist targets
+
+Easy에서는 기존 assist 동작을 바꾸지 않고 매 physics tick에 다음 목표값을 추가 기록한다.
+
+- `horizontalVelocityWorldMps: [vx, vz]`
+- `verticalVelocityMps`
+- `yawRateRadPerSec`
+
+`flight_method` 학습에서는 궤적·속도 및 이 목표값을 사용할 수 있고, Easy의 `appliedInput`을 사람의 직접 스틱 패턴 정답으로 취급하지 않는다.
+
+### tester 기록
+
+- `testerMode`를 텔레메트리/파티션에 포함
+- `testerMode=true` 랩은 향후 공개 리더보드 대상에서 제외
+- 원본 보존 및 학습 용도 분류와 공개 순위 자격은 별개
+
+## M1 기반 버전
+
+- `PHYSICS_VERSION=3`
+- aircraft profile version 2
+- `training-five-v2`
+- `race-five-v2`
+- `ASSIST_VERSION=1`
+- `schema_version=0.1.5`
 
 ## 자동 검증 범위
 
-- Betaflight식 rates 기본값과 full-stick 약 667°/s
-- 프로파일 v2 명목 T/W 약 10:1
-- 호버 스로틀과 10초 고도 유지
-- 최대 상승 초기 가속 목표값 ±10%
-- full-stick 360° 롤 시간 프로파일 목표값 ±10%
-- 동일 입력을 두 번 실행했을 때 숨은 상태까지 동일
-- 30/60/120 Hz 렌더 주기에서 고정 물리 결과 동일
-- 트랙 v2와 physics v3 버전 회귀
-- 게이트 시각/충돌 프레임 두께 공통 상수와 드론 시각/충돌 반경 일치
-- 게이트 통과 방향, 프레임/지지대 충돌, 랩 순서/시간/무효 처리
-- Easy 감속·고도 유지
-- 조종기 1% / 게임패드 5% 기본 deadzone
-- Easy pilot/applied input 이중 기록과 assist version
-- Easy/Acro 및 camera/horizon/height-assist 데이터 파티션 분리
-- vertical FOV + aspect ratio + viewport + 시야 보조 카메라 메타데이터
-- 실제 브라우저 로드, 안정 호버, FPV 수평선 토글, 높이 보조 조건, 두 v2 트랙 선택
-- renderer shadow map, gate legs/ground markers, cone/flag 스케일 단서 활성 상태
+기존 M1 테스트를 삭제하지 않고 다음을 추가/변경했다.
+
+- 공개 URL에서 Acro/Input source/조종기 보정/Rates UI 숨김
+- 공개 URL에서 Easy + keyboard 강제 및 UI change 우회 차단
+- `?tester=1`에서 기존 Acro/Gamepad/RC/보정/Rates 기능 복원
+- 기존 Acro 물리/rates 테스트 유지
+- 기존 Gamepad/RC 보정 테스트 유지
+- 입력 장치 종류별 파티션 분리
+- physics version별 파티션 분리
+- tester/public 파티션 분리
+- keyboard Acro가 `stick_pattern`으로 분류되지 않음
+- gamepad/RC + Easy가 `stick_pattern`으로 분류되지 않음
+- gamepad/RC + Acro 직접 입력만 `stick_pattern`
+- Easy assist 목표 속도/요율 기록
+- 기존 `assistedInput()`과 새 telemetry 노출 경로의 applied input 동일성
+- stick_pattern 내보내기에서 flight_method 강제 제외
+- tester 랩 공개 순위 제외 규칙
+
+## M1 완료 이력
+
+- [x] M1 기존 자동 테스트/배포 게이트 통과
+- [x] `training-five-v2` 배포 실행 확인
+- [x] `race-five-v2` 배포 실행 확인
+- [x] 대회용 트랙 3인칭에서 사용자가 게이트 높이 판단 가능 확인
+- [x] 대회용 트랙 FPV에서 사용자가 게이트 높이 판단 가능 확인
+
+**M1 완료 판정: 2026-09-26.**
+
+## 다음 단계
+
+1. 이번 공개 기능 플래그/학습 용도 변경의 최신 `npm test`와 GitHub Pages 배포를 확인한다.
+2. 이후 M2 · 기록/고스트로 진행한다.
+3. Acro 공개는 ROADMAP의 별도 조건부 마일스톤 기준을 만족할 때 진행한다.
 
 ## 알려진 한계
 
-- 기체 물리는 개발용 근사 모델이다. 15.2 N은 10:1 명목 T/W를 위한 설계값이며 실측 모터 데이터가 아니다. 배터리 sag 적용 시 순간 가용 T/W는 더 낮다.
-- 드론 시각 형상은 collision sphere와 같은 0.22 m 기준 반경을 사용하지만 실제 기체의 모든 세부 부품을 구형 충돌체로 개별 모델링하지는 않는다.
-- 실제 USB 조종기/게임패드 하드웨어 호환성과 조작감은 자동 테스트로 대체할 수 없다.
-- M1 텔레메트리는 세션 메모리의 랩 버퍼/분리 규칙을 검증하는 수준이다. 파일 저장·고스트·재시뮬레이션 기록 포맷은 M2에서 구현한다.
-- 서버 업로드·계정·공개 리더보드·학습 파이프라인은 아직 구현하지 않았다.
+- `?tester=1`은 인증/권한 제어가 아니다.
+- 실제 USB 조종기/게임패드의 모든 하드웨어 호환성은 자동 테스트로 대체할 수 없다.
+- M1 telemetry는 세션 메모리 수준이며 파일 저장·고스트·재시뮬레이션은 M2 범위다.
+- 서버 업로드·계정·공개 리더보드는 아직 구현하지 않았다. `publicLeaderboardEligible`는 M4 서버 구현 시 반드시 서버에서도 검증해야 한다.
