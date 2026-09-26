@@ -14,12 +14,15 @@ function payloadLines(recording:FullLapRecording):string[]{
   for(const value of recording.cameraChanges)lines.push(JSON.stringify({channel:'camera_changes',...value}));
   return lines;
 }
+function arrayBuffer(bytes:Uint8Array):ArrayBuffer{
+  return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer;
+}
 async function gzip(bytes:Uint8Array):Promise<Uint8Array>{
-  const stream=new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+  const stream=new Blob([arrayBuffer(bytes)]).stream().pipeThrough(new CompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 async function gunzip(bytes:Uint8Array):Promise<Uint8Array>{
-  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  const stream=new Blob([arrayBuffer(bytes)]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -29,7 +32,7 @@ export async function encodeRecording(recording:FullLapRecording):Promise<Encode
   const payloadSha256=await sha256(payload);
   const metadata={...recording.metadata,payloadSha256};
   const text=JSON.stringify({channel:'metadata',...metadata})+'\n'+payload;
-  const raw=new TextEncoder().encode(text), bytes=await gzip(raw);
+  const raw=new TextEncoder().encode(text),bytes=await gzip(raw);
   return {bytes,uncompressedBytes:raw.byteLength,compressedBytes:bytes.byteLength,payloadSha256};
 }
 
@@ -40,7 +43,7 @@ export async function decodeRecording(bytes:Uint8Array|ArrayBuffer|Blob):Promise
   const first=JSON.parse(lines[0]!) as Record<string,unknown>;
   if(first.channel!=='metadata')throw new Error('First JSONL record must be metadata');
   const {channel:_,...metadata}=first;
-  const recording:FullLapRecording={metadata:metadata as FullLapRecording['metadata'],frames:[],inputs:[],states:[],controllerStates:[],events:[],cameraChanges:[]};
+  const recording:FullLapRecording={metadata:metadata as unknown as FullLapRecording['metadata'],frames:[],inputs:[],states:[],controllerStates:[],events:[],cameraChanges:[]};
   for(const line of lines.slice(1)){
     const value=JSON.parse(line) as Record<string,unknown>;const ch=value.channel;delete value.channel;
     if(ch==='frames')recording.frames.push(value as unknown as FullLapRecording['frames'][number]);
