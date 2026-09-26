@@ -8,6 +8,7 @@ M0 완료. **M1 비행 프로토타입 및 안정화 완료.**
 M2 기록·고스트는 아직 시작하지 않았다.
 
 이번 변경은 M1 코어를 다시 여는 것이 아니라 **현재 제품 공개 정책과 학습 데이터 용도 규칙을 추가한 상태**다.
+최신 GitHub Actions에서 전체 `npm test`와 Pages 배포까지 성공했다.
 
 ## 현재 공개 제품 방향
 
@@ -117,6 +118,18 @@ Easy에서는 기존 assist 동작을 바꾸지 않고 매 physics tick에 다�
 - stick_pattern 내보내기에서 flight_method 강제 제외
 - tester 랩 공개 순위 제외 규칙
 
+## 최신 검증
+
+- [x] 전체 `npm test` 통과
+- [x] 공개 모드 Easy + keyboard E2E 통과
+- [x] tester 모드 Acro/Gamepad/RC E2E 통과
+- [x] training_use/assist target/export 규칙 테스트 통과
+- [x] GitHub Pages production build 성공
+- [x] GitHub Pages deploy 성공
+
+검증 기준 커밋: `8f23d4ecc4d69e7b46b801924d4599d375969989`
+GitHub Actions run: `36214326934`
+
 ## M1 완료 이력
 
 - [x] M1 기존 자동 테스트/배포 게이트 통과
@@ -129,9 +142,8 @@ Easy에서는 기존 assist 동작을 바꾸지 않고 매 physics tick에 다�
 
 ## 다음 단계
 
-1. 이번 공개 기능 플래그/학습 용도 변경의 최신 `npm test`와 GitHub Pages 배포를 확인한다.
-2. 이후 M2 · 기록/고스트로 진행한다.
-3. Acro 공개는 ROADMAP의 별도 조건부 마일스톤 기준을 만족할 때 진행한다.
+1. M2 · 기록/고스트로 진행한다.
+2. Acro 공개는 ROADMAP의 별도 조건부 마일스톤 기준을 만족할 때 진행한다.
 
 ## 알려진 한계
 
