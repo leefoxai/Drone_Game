@@ -46,28 +46,26 @@ export async function saveRecording(recording:FullLapRecording):Promise<StoredLa
     publicLeaderboardEligible:recording.metadata.publicLeaderboardEligible,compressedBytes:encoded.compressedBytes,uncompressedBytes:encoded.uncompressedBytes,
     blob:new Blob([encoded.bytes],{type:'application/gzip'}),
   };
-  const database=await db(),tx=database.transaction(STORE,'readwrite');tx.objectStore(STORE).put(row);await transactionDone(tx);database.close();
+  const database=await db(),tx=database.transaction(STORE,'readwrite'),done=transactionDone(tx);tx.objectStore(STORE).put(row);await done;database.close();
   const {blob:_,...summary}=row;return summary;
 }
 export async function listRecordings():Promise<StoredLapSummary[]>{
-  const database=await db(),tx=database.transaction(STORE,'readonly');
-  const rows=await request(tx.objectStore(STORE).getAll()) as StoredLapRow[];await transactionDone(tx);database.close();
+  const database=await db(),tx=database.transaction(STORE,'readonly'),done=transactionDone(tx);const rows=await request(tx.objectStore(STORE).getAll()) as StoredLapRow[];await done;database.close();
   return rows.map(({blob:_,...summary})=>summary).sort((a,b)=>b.createdAtUtc.localeCompare(a.createdAtUtc));
 }
 export async function loadRecording(recordingId:string):Promise<FullLapRecording|null>{
-  const database=await db(),tx=database.transaction(STORE,'readonly');const row=await request(tx.objectStore(STORE).get(recordingId)) as StoredLapRow|undefined;await transactionDone(tx);database.close();
-  return row?decodeRecording(row.blob):null;
+  const database=await db(),tx=database.transaction(STORE,'readonly'),done=transactionDone(tx);const row=await request(tx.objectStore(STORE).get(recordingId)) as StoredLapRow|undefined;await done;database.close();return row?decodeRecording(row.blob):null;
 }
 export async function loadRecordingBlob(recordingId:string):Promise<Blob|null>{
-  const database=await db(),tx=database.transaction(STORE,'readonly');const row=await request(tx.objectStore(STORE).get(recordingId)) as StoredLapRow|undefined;await transactionDone(tx);database.close();return row?.blob??null;
+  const database=await db(),tx=database.transaction(STORE,'readonly'),done=transactionDone(tx);const row=await request(tx.objectStore(STORE).get(recordingId)) as StoredLapRow|undefined;await done;database.close();return row?.blob??null;
 }
 export async function deleteRecording(recordingId:string):Promise<void>{
-  const database=await db(),tx=database.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(recordingId);await transactionDone(tx);database.close();
+  const database=await db(),tx=database.transaction(STORE,'readwrite'),done=transactionDone(tx);tx.objectStore(STORE).delete(recordingId);await done;database.close();
 }
 export async function bestRecording(partitionKey:string):Promise<FullLapRecording|null>{
   const all=await listRecordings();const best=all.filter(v=>v.partitionKey===partitionKey&&v.outcome==='complete'&&v.seconds!==null).sort((a,b)=>(a.seconds??Infinity)-(b.seconds??Infinity))[0];
   return best?loadRecording(best.recordingId):null;
 }
 export async function clearRecordingsForTests():Promise<void>{
-  const database=await db(),tx=database.transaction(STORE,'readwrite');tx.objectStore(STORE).clear();await transactionDone(tx);database.close();
+  const database=await db(),tx=database.transaction(STORE,'readwrite'),done=transactionDone(tx);tx.objectStore(STORE).clear();await done;database.close();
 }
