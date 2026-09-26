@@ -1,6 +1,6 @@
 # 드론 플레이 기록 명세 초안
 
-상태: **설계 초안, 기록기는 미구현**. `schema_version: "0.1.4"`.
+상태: **설계 초안, 기록기는 미구현**. `schema_version: "0.1.5"`.
 M1~M3에서 검증하고 M3의 소량 파이프라인 시험을 통과한 뒤 형식을 확정한다.
 이 문서가 기록 형식의 기준이다. 변경 전 사용자에게 알리고 스키마 버전을 올린다.
 물리 계산을 바꿀 때는 별도로 `physics_version`도 올린다.
@@ -8,6 +8,7 @@ M1~M3에서 검증하고 M3의 소량 파이프라인 시험을 통과한 뒤 �
 ## 1. 원칙과 시간
 
 - 원본은 입력·상태·이벤트 로그다. 영상/학습 라벨은 원본에서 파생한다.
+- **학습 용도(`training_use`)는 원본 보존 여부를 결정하지 않는다. 유효 원본 랩은 모두 보존하고 용도 표시로만 구분한다.**
 - 물리: **240 Hz 초안**, `dt = 1/240 s`. `tick`은 0부터 시작하는 정수다.
 - `state[0]`은 초기 상태다. `input[k]`는 `[k*dt, (k+1)*dt)`에 적용하고 결과는 `state[k+1]`이다.
   N개 입력에 N+1개 상태가 대응한다. 종료 이벤트는 마지막 상태의 tick에 기록한다.
@@ -36,6 +37,7 @@ M1~M3에서 검증하고 M3의 소량 파이프라인 시험을 통과한 뒤 �
 |---|---|---|---|
 | 적용 입력 `inputs` | 매 물리 tick, 240 Hz | tick, throttle, roll, pitch, yaw | throttle [0,1], 나머지 [-1,1], 장치 보정 및 선택적 조종 보조를 거친 물리 엔진의 실제 입력 |
 | 조종자 명령 `pilot_inputs` | 매 물리 tick, 240 Hz | tick, throttle, roll, pitch, yaw | 장치 보정 후·조종 보조 전 값. Acro는 inputs와 동일. 쉬운 조종의 throttle 0.5는 수직 속도 0 요청 |
+| Easy 보조 목표 `assist_targets` | Easy에서 매 물리 tick | horizontal_velocity_world_mps[x,z], vertical_velocity_mps, yaw_rate_rad_s | `assist.ts`가 계산한 속도 목표. 기록을 위해 계산값을 노출하되 보조 알고리즘 동작 자체는 바꾸지 않음 |
 | 강체 상태 `states` | 초기 상태 + 매 물리 tick | tick, position_world, orientation_body_to_world, velocity_world, angular_velocity_body | m, 쿼터니언, m/s, rad/s |
 | 제어기 상태 `controller_states` | 초기 + 매 물리 tick | tick, 목표 각속도, 적분기·필터 상태, 모터/액추에이터 상태 | 각각 단위 명시; 물리 구현에서 필드 확정, 숨은 상태도 재현 가능하게 저장 |
 | 이벤트 `events` | 발생 시 | tick, sequence, type, payload | 출발, 게이트 통과, 충돌, 리셋, 완주, 중단, 장치 분리 등 |
@@ -45,6 +47,7 @@ M1~M3에서 검증하고 M3의 소량 파이프라인 시험을 통과한 뒤 �
 권위 있는 재현 입력은 `inputs`다. M1 런타임에서도 매 물리 tick에 **사람이 넣은 `pilot_inputs`와 실제 물리에 전달된 `inputs`를 동시에 보존**하고, 각 샘플에 `control_mode`와 `assist_version`을 연결한다. 원시 입력과 진단은 누락 가능하며 이를 필수 물리 입력으로 삼지 않는다.
 쉬운 조종 기록을 재시뮬레이션할 때 `inputs`에 보조기를 다시 적용하지 않는다.
 사람의 선택을 학습할 때는 `pilot_inputs`와 조종 모드를 확인하고, 자동 보정된 값을 사람의 직접 조종으로 잘못 표시하지 않는다.
+Easy의 `assist_targets`는 `flight_method` 학습에 사용할 수 있는 의도 수준의 목표값이며, 스틱 패턴 정답으로 취급하지 않는다.
 상태만 읽는 고스트 재생과 입력을 다시 계산하는 서버 검증을 구분한다.
 이벤트 순서는 `(tick, sequence)`로 안정적으로 정렬하고 충돌/통과의 위치·대상 ID를 payload에 기록한다.
 최종 랩타임은 출발/완주 tick과 룰셋에서 계산한다. 클라이언트 제출 점수를 그대로 신뢰하지 않는다.
@@ -53,17 +56,21 @@ M1~M3에서 검증하고 M3의 소량 파이프라인 시험을 통과한 뒤 �
 
 | 필드 | 내용 |
 |---|---|
-| schema_version | 기록 구조 버전. 이 초안은 0.1.4 |
+| schema_version | 기록 구조 버전. 이 초안은 0.1.5 |
 | recording_id, session_id | 충돌 방지 ID. 세션/랩 분할 및 중복 검사에 사용 |
 | created_at_utc | UTC ISO 8601 시각. 시뮬레이션 시간과 별도 |
 | track | 트랙 ID, 버전, 콘텐츠 해시. M1 현재 `training-five-v2`, `race-five-v2`. v2는 게이트 프레임 0.22 m와 지면 지지대를 시각/충돌 공통 형상으로 사용한다 |
 | ruleset | ID, 버전, 모드, 페널티, 완주 조건, 설정 스냅샷/해시 |
 | aircraft_profile | ID, 버전, 질량·관성·모터·항력 등 전체 설정 스냅샷/해시 및 단위 |
 | rates | 모델 ID/버전, roll/pitch/yaw의 최대 각속도(rad/s), 전체 파라미터. M1의 Betaflight식 곡선은 rcRate, superRate, expo(모두 무차원)를 사용하며 최대 각속도는 곡선 끝점에서 산출한다. 현재 세 축 공통 |
-| input_device | 종류(gamepad/usb-controller 등), 브라우저 장치 매핑 정보, 축/버튼 매핑, 반전·데드존·끝점 보정. 일련번호는 수집하지 않음 |
+| input_device_kind | `keyboard` / `gamepad` / `rc_joystick`. 표준 Gamepad mapping은 gamepad, 비표준 USB 조종기는 rc_joystick으로 기록 |
+| input_device | 브라우저 장치 매핑 정보, 축/버튼 매핑, 반전·데드존·끝점 보정. 일련번호는 수집하지 않음 |
 | display | 화면 주사율 추정치(Hz, 알 수 없으면 null), 측정 방법, 실제 렌더 fps, 뷰포트 크기, devicePixelRatio. 추정치를 모니터 사양으로 단정하지 않음 |
 | physics_version | 사용한 공유 물리의 불변 버전과 소스 커밋. 현재 M1은 정수 3(1: 첫 Acro 계산 → 2: 쉬운 조종 보조기 → 3: 게이트 프레임/지지대와 드론 반경의 충돌 의미 정합화). 파라미터 변경은 전체 프로파일 스냅샷에도 반영 |
 | control_profile | mode: acro 또는 assisted, 보조기 버전 및 전체 설정. M1 assisted v1은 수평 목표 속도 4 m/s, 수직 목표 속도 ±2 m/s, 요 각속도 최대 π/3 rad/s. 게인·가속 제한도 packages/physics의 ASSIST_SETTINGS 스냅샷으로 남김 |
+| tester_mode | `?tester=1`로 활성화된 테스터 전용 조종 기능 사용 여부. 접근 인증이 아니라 제품 기능 플래그임 |
+| public_leaderboard_eligible | `tester_mode=false`인 기록만 true. tester 랩은 원본/학습용으로 보존 가능하지만 향후 공개 순위에서는 제외 |
+| training_use | `stick_pattern` 또는 `flight_method`. 원본 삭제/보존 여부와 무관한 학습 용도 라벨 |
 | physics_hz | 고정 물리 주기. 초안 240 |
 | seed, prng | 난수 시드와 알고리즘/버전. Math.random/실제 시계를 물리에서 사용하지 않음 |
 | initial_state | 강체·제어기·모터·환경의 완전한 초기 상태. states[0] 등과 일치 |
@@ -74,12 +81,45 @@ M1~M3에서 검증하고 M3의 소량 파이프라인 시험을 통과한 뒤 �
 | consent | granted(boolean), scope, policy_version, granted_at_utc 또는 null. 기본 미동의 |
 | outcome | complete/aborted/invalid, 마지막 tick, 게이트 결과, 중단 이유. 서버 검증 결과와 구분 |
 
+### 4.1 파티션 키
+
 랭킹 비교 키에는 최소 트랙 버전·룰셋 버전·physics_version을 포함한다.
-조종 모드와 보조기 버전도 분리한다. **쉬운 조종과 Acro는 순위와 학습 데이터 모두 별도 파티션**으로 취급하며 기본 Acro 학습 데이터에 assisted 기록을 섞지 않는다.
-M1 학습/세션 파티션 키는 최소 `track_id + control_mode + aircraft_profile_version + assist_version + camera_mode + artificial_horizon_enabled + height_assist_enabled`을 포함한다. Acro의 assist_version은 null/none이다.
-카메라 또는 시각 보조를 변경하면 같은 조종 모드라도 별도 조건으로 취급한다. 대회용 Acro에서는 `height_assist_enabled=false`다.
-기체/rates 자유 조정 허용 여부도 룰셋으로 정하고 필요한 경우 비교 키에 반영한다.
-설정은 ID만으로 끝내지 않고 스냅샷 또는 내용 주소(해시)로 과거 값을 찾을 수 있게 한다.
+학습/세션 파티션은 조건이 다른 입력이 섞이지 않도록 최소 다음을 포함한다.
+
+```text
+track_id
++ control_mode
++ input_device_kind
++ physics_version
++ aircraft_profile_version
++ assist_version
++ camera_mode
++ artificial_horizon_enabled
++ height_assist_enabled
++ tester_mode
+```
+
+Acro의 `assist_version`은 null/none이다. 카메라 또는 시각 보조, 입력 장치, physics version을 변경하면 별도 조건으로 취급한다.
+
+### 4.2 training_use 판정 규칙
+
+판정 규칙은 구현의 `classifyTrainingUse()` 하나를 단일 기준으로 사용한다.
+
+```text
+if control_mode == acro
+and input_device_kind in {gamepad, rc_joystick}
+and assist_version is none
+and 모든 tick에서 pilot_input == applied_input:
+    training_use = stick_pattern
+else:
+    training_use = flight_method
+```
+
+- `stick_pattern`: gamepad/RC 조이스틱 + Acro에서 사람의 스틱 입력이 그대로 물리에 들어간 랩만 사용한다.
+- `flight_method`: 그 밖의 모든 유효 랩. 키보드, Easy, 또는 사람 스틱과 실제 적용 입력이 달라진 랩을 포함한다.
+- keyboard + Acro도 `flight_method`다.
+- gamepad/rc_joystick + Easy도 `flight_method`다.
+- `tester_mode`는 training_use 판정 조건이 아니다. tester Acro RC 랩도 조건을 충족하면 `stick_pattern`일 수 있지만 공개 순위에는 들어가지 않는다.
 
 ## 5. 저장 구조 초안
 
@@ -109,6 +149,8 @@ recordings/<recording_id>/
   기본 프레임 수는 `floor(duration_s * fps)`이며 마지막 시각은 종료 시각 미만이다.
 - 관측은 입력 적용 전 `state[k]`를 렌더링하고 행동 라벨은 같은 k의 `input[k]`로 연결한다.
   240 Hz 입력 전체는 보존한다. 60 Hz 봇의 행동 유지/다운샘플 정책은 M3에서 비교 후 버전 명시한다.
+- `stick_pattern` 학습에서는 조건을 충족한 사람의 직접 스틱 패턴만 사용한다.
+- `flight_method` 학습에서는 궤적·속도·게이트 진행과 Easy의 `assist_targets` 같은 목표값을 사용하고, Easy의 `applied_input`을 사람 스틱 정답으로 취급하지 않는다.
 - 비정수 주기 조합은 프레임마다 state 양쪽 tick과 보간 비율을 남긴다. 위치는 선형, 자세는 slerp 초안.
   물리 재시뮬레이션에는 렌더 보간 값을 쓰지 않는다.
 - `frames.jsonl`에 frame_index, timestamp_s, source_tick, recording_id, 관측/행동 대응,
@@ -124,6 +166,9 @@ recordings/<recording_id>/
 ## 7. 동의·선별·데이터 분할
 
 - 동의가 없거나 필드가 누락되면 학습용 내보내기를 거부한다. 랭킹 공개와 학습 동의는 별개다.
+- 원본 기록은 training_use와 무관하게 보존하고, 내보내기는 원본을 수정하거나 삭제하지 않는 파생 선택으로 수행한다.
+- `stick_pattern` 내보내기는 `training_use=stick_pattern`이면서 `classifyTrainingUse()` 재검증도 통과한 랩만 허용한다. `flight_method` 랩은 호출 측 실수나 잘못된 라벨이 있어도 포함하지 않는다.
+- `flight_method` 내보내기는 `training_use=flight_method`인 유효 랩만 사용한다.
 - 수집 시점의 동의 스냅샷과 서버의 최신 동의/철회 상태를 모두 확인한다.
   철회된 기록은 이후 내보내기에서 제외한다. 이미 배포한 데이터의 처리 절차는 M4 정책 검토에서 확정한다.
 - 이름·이메일·IP·장치 일련번호를 학습용 파일에 넣지 않는다. 익명화된 분할용 ID도 접근 범위를 제한한다.
@@ -139,6 +184,7 @@ recordings/<recording_id>/
 
 ## 변경 이력
 
+- 0.1.5 (2026-09-26): 공개 기본을 keyboard + Easy로 제한하고 `?tester=1`에서 Acro/gamepad/RC/rates/calibration을 활성화하는 tester flag를 기록. 파티션 키에 `input_device_kind`, `physics_version`, `tester_mode` 추가. `training_use` 단일 판정 규칙과 stick_pattern/flight_method 내보내기 규칙 추가. Easy 매 tick `assist_targets` 기록 추가. tester 랩은 향후 공개 순위에서 제외.
 - 0.1.4 (2026-09-26): 게이트 프레임/지지대 충돌 의미를 시각 형상과 통일해 physics_version=3, track v2로 상승. 카메라 모드, FPV 인공 수평선, 연습용 높이 보조의 켜짐 여부를 메타데이터와 학습 파티션 키에 추가.
 - 0.1.3 (2026-09-26): M1 마무리 요구사항 반영. 보조 전/후 입력을 런타임에서 동시에 기록하고 control_mode/assist_version을 결합, Easy/Acro 순위·학습 파티션 분리, 카메라에 vertical FOV + aspect ratio + viewport 크기/devicePixelRatio를 함께 기록하도록 명시.
 - 0.1.2 (2026-09-26): 사용자의 조작 난이도 피드백으로 쉬운 조종 도입. physics_version=2,
