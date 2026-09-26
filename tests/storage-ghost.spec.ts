@@ -3,20 +3,16 @@ import { test, expect } from '@playwright/test';
 test('IndexedDB 기록은 새로고침 후 남고 현재 조건 최고랩 고스트로 재생된다',async({page})=>{
   await page.goto('/');await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
   await page.evaluate(async()=>{
-    const [{M2LapRecorder},{saveRecording,clearRecordingsForTests},{initialState,step},{assistedCommand},{cameraSnapshot},{TRAINING_TRACK},profileModule]=await Promise.all([
-      import('/src/recording.ts'),import('/src/recording-store.ts'),import('/@fs'+location.pathname.replace(/\/Drone_Game\/$/,'')+'/packages/physics/src/index.ts').catch(()=>import('../../../packages/physics/src/index.ts')),
-      import('../../../packages/physics/src/assist.ts'),import('../../../packages/physics/src/telemetry.ts'),import('../../../packages/physics/src/track.ts'),import('../../../packages/physics/profiles/racer5.json',{with:{type:'json'}})
-    ] as const);
+    const {saveRecording,clearRecordingsForTests}=await import('/src/recording-store.ts');
     await clearRecordingsForTests();
-    const profile=structuredClone((profileModule as {default:any}).default),state=initialState(profile),camera=cameraSnapshot(75,1280,720,1,'chase',false,true),recorder=new M2LapRecorder();
-    const context={trackId:TRAINING_TRACK.id,controlMode:'assisted' as const,aircraftProfileVersion:profile.version,assistVersion:1,physicsVersion:3,inputDeviceKind:'keyboard' as const,testerMode:false,cameraMode:'chase' as const,artificialHorizonEnabled:false,heightAssistEnabled:true};
-    recorder.begin({context,track:TRAINING_TRACK,profile,initialState:structuredClone(state),camera,inputDevice:{mapping:null,browserMapping:null,axesCount:null,buttonsCount:null},display:{refreshRateHzEstimate:60,renderFpsEstimate:60,viewportWidth:1280,viewportHeight:720,devicePixelRatio:1},runtime:{userAgent:'e2e',language:'ko-KR'},clientBuild:'e2e',sessionId:'e2e-session'});
-    for(let i=0;i<240;i++){
-      const pilot={throttle:.5,roll:0,pitch:-.25,yaw:0},cmd=assistedCommand(state,pilot,profile),tick=state.tick;
-      if(i%4===0)recorder.frame({simulationTick:tick,physicsAlpha:0,inputReadMonotonicMs:i*1000/240,rafTimestampMs:i*1000/240,inputDeviceKind:'keyboard',keysDown:['ArrowUp'],rawAxes:null,rawButtons:null,normalizedPilotInput:pilot});
-      step(state,cmd.appliedInput,profile);recorder.tick(tick,pilot,cmd.appliedInput,cmd.targets,camera,state);
-    }
-    const result=await recorder.finish('complete',1,TRAINING_TRACK.gates.length,null);if(!result)throw new Error('fixture failed');await saveRecording(result);
+    const state={tick:0,position:[0,3,6],velocity:[0,0,0],orientation:[0,0,0,1],omega:[0,0,0],integral:[0,0,0],previousOmega:[0,0,0],derivative:[0,0,0],motors:[.2,.2,.2,.2],charge:1,voltage:25.2,thrustN:6,targetOmega:[0,0,0],acceleration:[0,0,0]};
+    const metadata={
+      schemaVersion:'0.1.6',recordingFormat:'drone-lap-jsonl-gzip-v1',recordingId:'e2e-recording',sessionId:'e2e-session',createdAtUtc:new Date().toISOString(),
+      trackId:'training-five-v2',controlMode:'assisted',aircraftProfileVersion:2,assistVersion:1,physicsVersion:3,inputDeviceKind:'keyboard',testerMode:false,cameraMode:'chase',artificialHorizonEnabled:false,heightAssistEnabled:true,
+      partitionKey:'training-five-v2|assisted|device-keyboard|physics-3|profile-2|assist-1|camera-chase|horizon-off|height-assist-on|tester-off',trainingUse:'flight_method',publicLeaderboardEligible:true,physicsHz:240,
+      track:{id:'training-five-v2',version:2,snapshot:{id:'training-five-v2',version:2,label:'fixture',description:'fixture',gates:[]},sha256:'fixture'},ruleset:{id:'fixture',version:1,snapshot:{},sha256:'fixture'},aircraftProfile:{id:'racer5',version:2,snapshot:{},sha256:'fixture'},rates:{model:'betaflight',rcRate:1,superRate:.7,expo:0,maxRateRadS:11.63},inputDevice:{mapping:null,browserMapping:null,axesCount:null,buttonsCount:null},display:{refreshRateHzEstimate:60,renderFpsEstimate:60,viewportWidth:1280,viewportHeight:720,devicePixelRatio:1},controlProfile:{mode:'assisted',assistVersion:1,assistSettings:null},seed:0,prng:'none',initialState:state,environment:{gravityWorldMps2:[0,-9.80665,0],windWorldMps:[0,0,0]},camera:{verticalFovRad:75*Math.PI/180,aspectRatio:16/9,viewportWidth:1280,viewportHeight:720,devicePixelRatio:1,cameraMode:'chase',artificialHorizonEnabled:false,heightAssistEnabled:true,nearM:.025,farM:220,relativePositionM:[0,.38,3.2],relativeOrientation:null},practiceAssist:{heightAssistEnabled:true},clientBuild:'e2e',runtime:{userAgent:'e2e',language:'ko-KR'},consent:{granted:false,scope:[],policyVersion:null,grantedAtUtc:null},outcome:{status:'complete',finalTick:0,seconds:1,completedGates:5,reason:null}
+    };
+    await saveRecording({metadata:metadata as any,frames:[],inputs:[],states:[{tick:0,state:state as any}],controllerStates:[],events:[],cameraChanges:[]});
   });
   await page.reload();await expect(page.locator('#status')).toHaveText('3D 장면 준비 완료');
   await expect(page.locator('.recording-row')).toHaveCount(1);
