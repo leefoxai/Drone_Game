@@ -99,6 +99,7 @@ export class ControllerPanel {
       this.selectedId=next.id;this.mapping=structuredClone(this.saved[next.id]??defaultMapping(deviceKind(next))); this.calibration=null;this.drawMapping();
     }
     if(this.calibration && next) for(const c of CHANNELS){const raw=next.axes[this.calibration[c].axis];if(raw!==undefined){this.calibration[c].min=Math.min(this.calibration[c].min,raw);this.calibration[c].max=Math.max(this.calibration[c].max,raw);}}
+    this.updateDisplay();
     return next ? readGamepad(next,this.mapping) : null;
   }
   updateDisplay() {
