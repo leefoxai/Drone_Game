@@ -8,6 +8,7 @@ export interface TouchAxes {
 }
 
 const clamp=(value:number)=>Math.max(-1,Math.min(1,value));
+const negate=(value:number)=>value===0?0:-value;
 function deadzone(value:number,zone=.045){
   const magnitude=Math.abs(value);
   if(magnitude<=zone)return 0;
@@ -23,9 +24,9 @@ export function touchInputFromAxes(value:TouchAxes):Input {
   const rightX=deadzone(clamp(value.rightX)),rightY=deadzone(clamp(value.rightY));
   return {
     throttle:Math.max(0,Math.min(1,.5+leftY*.5)),
-    roll:-rightX,
-    pitch:-rightY,
-    yaw:-leftX,
+    roll:negate(rightX),
+    pitch:negate(rightY),
+    yaw:negate(leftX),
   };
 }
 
