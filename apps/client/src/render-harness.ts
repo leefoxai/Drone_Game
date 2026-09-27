@@ -3,8 +3,18 @@ import { decodeRecording } from './recording-codec';
 import { buildM3FramePlan } from './m3-render';
 import type { FullLapRecording } from './recording';
 
+interface M3RenderLoadResult {
+  recordingId:string;
+  frameCount:number;
+  seconds:number;
+  schemaVersion:string;
+  partitionKey:string;
+  trainingUse:string;
+  consent:FullLapRecording['metadata']['consent'];
+  trackId:string;
+}
 interface M3RenderApi {
-  load(base64:string):Promise<{recordingId:string;frameCount:number;seconds:number;schemaVersion:string}>;
+  load(base64:string):Promise<M3RenderLoadResult>;
   frame(index:number):Promise<ReturnType<typeof buildM3FramePlan>[number]>;
   plan():ReturnType<typeof buildM3FramePlan>;
 }
@@ -20,13 +30,16 @@ function fromBase64(value:string):Uint8Array{
   const binary=atob(value),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);return bytes;
 }
 
-async function load(base64:string){
+async function load(base64:string):Promise<M3RenderLoadResult>{
   if(!import.meta.env.DEV)throw new Error('M3 render harness is development-only');
   recording=await decodeRecording(fromBase64(base64));
   if(recording.metadata.outcome.status!=='complete')throw new Error('complete lap required');
   framePlan=buildM3FramePlan(recording,30);
   world?.dispose();world=createWorld(canvas,recording.metadata.track.snapshot);
-  return {recordingId:recording.metadata.recordingId,frameCount:framePlan.length,seconds:recording.metadata.outcome.seconds!,schemaVersion:recording.metadata.schemaVersion};
+  return {
+    recordingId:recording.metadata.recordingId,frameCount:framePlan.length,seconds:recording.metadata.outcome.seconds!,schemaVersion:recording.metadata.schemaVersion,
+    partitionKey:recording.metadata.partitionKey,trainingUse:recording.metadata.trainingUse,consent:structuredClone(recording.metadata.consent),trackId:recording.metadata.trackId,
+  };
 }
 
 async function frame(index:number){
