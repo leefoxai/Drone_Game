@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>M3 BC Bot</title></head>
+<body style="margin:0;overflow:hidden;background:#000;color:#fff;font-family:sans-serif">
+<canvas id="scene" style="display:block;width:100vw;height:100vh"></canvas>
+<div style="position:fixed;left:16px;top:16px;background:#101923dd;padding:12px;border-radius:8px;max-width:420px">
+<strong>M3 Local BC Bot</strong><br><small>development-only · model JSON은 local_data에서 직접 선택</small><br><br>
+<input id="model" type="file" accept="application/json,.json"><button id="start" disabled>시작/리셋</button>
+<pre id="status" style="white-space:pre-wrap">모델 파일을 선택하세요.</pre>
+</div>
+<script type="module" src="/src/bot-harness.ts"></script>
+</body>
+</html>
