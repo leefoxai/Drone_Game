@@ -11,8 +11,12 @@ import { getCurrentCameraPose } from './camera-telemetry';
 import type { RenderCameraPose } from './camera-telemetry';
 import { loadTrainingConsent, trainingConsentSnapshot } from './consent';
 
-export const SCHEMA_VERSION = '0.1.6';
-export const RECORDING_FORMAT = 'drone-lap-jsonl-gzip-v1';
+export const SCHEMA_VERSION = '0.2.0';
+export const LEGACY_SCHEMA_VERSION = '0.1.6';
+export const RECORDING_FORMAT = 'drone-lap-jsonl-gzip-v2';
+export const LEGACY_RECORDING_FORMAT = 'drone-lap-jsonl-gzip-v1';
+export const INPUT_CHUNK_SIZE = 256;
+export const STATE_CHECKPOINT_INTERVAL_TICKS = 24; // 0.1 s at 240 Hz
 export const RULESET_VERSION = 1;
 export const RESIM_TOLERANCE = {
   positionM: 1e-9,
@@ -35,7 +39,7 @@ export interface FrameInputRecord {
   rawAxes: number[] | null;
   rawButtons: number[] | null;
   normalizedPilotInput: Input;
-  /** Exact camera transform/projection used by the most recent rendered frame. */
+  /** Runtime-only exact render pose. Schema 0.2.0 omits this repeated value from disk. */
   cameraPose: RenderCameraPose | null;
 }
 
@@ -65,6 +69,8 @@ export interface RecordingMetadata extends ControlContext {
   trainingUse: TrainingUse;
   publicLeaderboardEligible: boolean;
   physicsHz: number;
+  inputChunkSize?: number;
+  stateCheckpointIntervalTicks?: number;
   track: { id: string; version: number; snapshot: Track; sha256: string };
   ruleset: { id: string; version: number; snapshot: Record<string, unknown>; sha256: string };
   aircraftProfile: { id: string; version: number; snapshot: Profile; sha256: string };
@@ -95,10 +101,13 @@ export interface FullLapRecording {
   metadata: RecordingMetadata;
   frames: FrameInputRecord[];
   inputs: PhysicsInputRecord[];
+  /** Full 240 Hz states in memory. For schema 0.2.0 these are reconstructed from appliedInput on decode. */
   states: StateRecord[];
   controllerStates: ControllerStateRecord[];
   events: LapEvent[];
   cameraChanges: Array<CameraSnapshot & { tick: number }>;
+  /** Authoritative states actually stored on disk. Legacy 0.1.6 uses every state; 0.2.0 uses 10 Hz + event/final checkpoints. */
+  recordedCheckpoints?: StateRecord[];
 }
 
 export interface RecorderMetadataSource {
@@ -136,7 +145,7 @@ export async function sha256(value: unknown): Promise<string> {
 }
 
 const copyState=(state:State):State=>cloneState(state);
-function controllerState(state:State):ControllerStateRecord {
+export function controllerStateRecord(state:State):ControllerStateRecord {
   return {tick:state.tick,integral:[...state.integral],previousOmega:[...state.previousOmega],derivative:[...state.derivative],motors:[...state.motors],charge:state.charge,voltage:state.voltage,thrustN:state.thrustN,targetOmega:[...state.targetOmega],acceleration:[...state.acceleration]};
 }
 function cameraExtrinsics(camera:CameraSnapshot):Pick<RecordingMetadata['camera'],'relativePositionM'|'relativeOrientation'> {
@@ -166,7 +175,7 @@ export class M2LapRecorder {
     this.lapConsent=structuredClone(this.consentProvider());
     this.initialRenderPose=getCurrentCameraPose();
     this.states=[{tick:source.initialState.tick,state:copyState(source.initialState)}];
-    this.controllers=[controllerState(source.initialState)];
+    this.controllers=[controllerStateRecord(source.initialState)];
     this.cameras=[{tick:source.initialState.tick,...structuredClone(source.camera)}];
     this.events=[];this.inputs=[];this.frames=[];this.eventSequence=0;this.frameSequence=0;
     this.event(source.initialState.tick,'lap_start',{position:[...source.initialState.position]});
@@ -178,7 +187,7 @@ export class M2LapRecorder {
     if(!this.active)return;
     this.inputs.push({tick,pilotInput:{...pilotInput},appliedInput:{...appliedInput},controlMode:this.source!.context.controlMode,assistVersion:this.source!.context.assistVersion,assistTargets:assistTargets?structuredClone(assistTargets):null});
     this.states.push({tick:afterState.tick,state:copyState(afterState)});
-    this.controllers.push(controllerState(afterState));
+    this.controllers.push(controllerStateRecord(afterState));
     const last=this.cameras.at(-1)!;
     if(JSON.stringify({...last,tick:undefined})!==JSON.stringify(camera))this.cameras.push({tick:afterState.tick,...structuredClone(camera)});
   }
@@ -199,7 +208,7 @@ export class M2LapRecorder {
     const cameraDetails=cameraExtrinsics(source.camera);
     const metadata:RecordingMetadata={
       ...source.context,
-      schemaVersion:SCHEMA_VERSION,recordingFormat:RECORDING_FORMAT,
+      schemaVersion:SCHEMA_VERSION,recordingFormat:RECORDING_FORMAT,inputChunkSize:INPUT_CHUNK_SIZE,stateCheckpointIntervalTicks:STATE_CHECKPOINT_INTERVAL_TICKS,
       recordingId:crypto.randomUUID(),sessionId:source.sessionId,createdAtUtc:new Date().toISOString(),partitionKey,trainingUse,
       publicLeaderboardEligible:publicLeaderboardEligible(source.context)&&status==='complete',physicsHz:PHYSICS_HZ,
       track:{id:source.track.id,version:source.track.version,snapshot:trackSnapshot,sha256:await sha256(trackSnapshot)},
@@ -220,14 +229,17 @@ export class M2LapRecorder {
 
 export interface ResimulationResult { states:StateRecord[]; maxPositionErrorM:number; maxVelocityErrorMps:number; maxOrientationError:number; maxAngularVelocityErrorRadS:number }
 const distance=(a:number[],b:number[])=>Math.hypot(...a.map((v,i)=>v-b[i]!));
-export function resimulateRecording(recording:FullLapRecording,profile:Profile=profileData):ResimulationResult {
+export function resimulateRecording(recording:FullLapRecording,profile:Profile=recording.metadata.aircraftProfile.snapshot):ResimulationResult {
   if(recording.metadata.physicsVersion!==3)throw new Error(`Unsupported physics version ${recording.metadata.physicsVersion}`);
   const sim=copyState(recording.metadata.initialState),states:StateRecord[]=[{tick:sim.tick,state:copyState(sim)}];
+  const checkpointSource=recording.recordedCheckpoints?.length?recording.recordedCheckpoints:null;
+  const checkpointByTick=checkpointSource?new Map(checkpointSource.map(value=>[value.tick,value.state])):null;
   let maxPositionErrorM=0,maxVelocityErrorMps=0,maxOrientationError=0,maxAngularVelocityErrorRadS=0;
   for(let i=0;i<recording.inputs.length;i++){
     step(sim,recording.inputs[i]!.appliedInput,profile);
     states.push({tick:sim.tick,state:copyState(sim)});
-    const expected=recording.states[i+1]?.state;if(!expected)continue;
+    const expected=checkpointByTick?checkpointByTick.get(sim.tick):recording.states[i+1]?.state;
+    if(!expected)continue;
     maxPositionErrorM=Math.max(maxPositionErrorM,distance(sim.position,expected.position));
     maxVelocityErrorMps=Math.max(maxVelocityErrorMps,distance(sim.velocity,expected.velocity));
     maxOrientationError=Math.max(maxOrientationError,distance(sim.orientation,expected.orientation));
