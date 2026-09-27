@@ -10,7 +10,7 @@ import { cameraSnapshot } from '../packages/physics/src/telemetry';
 import type { ControlContext, InputDeviceKind } from '../packages/physics/src/telemetry';
 import { defaultMapping } from '../apps/client/src/input';
 import { setCurrentCameraPose } from '../apps/client/src/camera-telemetry';
-import { M2LapRecorder, recordingWithinTolerance, resimulateRecording } from '../apps/client/src/recording';
+import { M2LapRecorder, STATE_CHECKPOINT_INTERVAL_TICKS, recordingWithinTolerance, resimulateRecording } from '../apps/client/src/recording';
 import type { FullLapRecording } from '../apps/client/src/recording';
 import { decodeRecording, encodeRecording } from '../apps/client/src/recording-codec';
 
@@ -32,26 +32,22 @@ async function fixture(name:string,kind:InputDeviceKind,mode:'assisted'|'acro',t
   const result=await recorder.finish('complete',2,track.gates.length,null);if(!result)throw new Error('fixture finalize failed');return result;
 }
 
-test('샘플 랩 3개는 gzip JSONL round-trip과 입력 재시뮬레이션 허용 오차를 통과한다',async()=>{
+test('schema 0.2.0 샘플 랩 3개는 compact gzip round-trip, Python validator, 재시뮬레이션을 통과한다',async()=>{
   const fixtures=[await fixture('keyboard-easy','keyboard','assisted',TRAINING_TRACK),await fixture('race-easy','keyboard','assisted',RACE_TRACK),await fixture('rc-acro','rc_joystick','acro',TRAINING_TRACK)];
   expect(fixtures.map(v=>v.metadata.trainingUse)).toEqual(['flight_method','flight_method','stick_pattern']);
-  mkdirSync('test-results/m2',{recursive:true});
-  const paths:string[]=[];
+  mkdirSync('test-results/m3',{recursive:true});const paths:string[]=[];
   for(let i=0;i<fixtures.length;i++){
-    const encoded=await encodeRecording(fixtures[i]!);expect(encoded.compressedBytes).toBeLessThan(encoded.uncompressedBytes);
-    const decoded=await decodeRecording(encoded.bytes);expect(decoded.metadata.recordingId).toBe(fixtures[i]!.metadata.recordingId);expect(decoded.states.length).toBe(decoded.inputs.length+1);
-    const resim=resimulateRecording(decoded,profile);expect(recordingWithinTolerance(resim)).toBe(true);expect(resim.maxPositionErrorM).toBeLessThanOrEqual(1e-9);
-    const path=`test-results/m2/fixture-${i+1}.jsonl.gz`;writeFileSync(path,encoded.bytes);paths.push(path);
+    const encoded=await encodeRecording(fixtures[i]!);expect(encoded.compressedBytes).toBeLessThan(encoded.uncompressedBytes);expect(encoded.compressedBytes).toBeLessThan(100_000);
+    const decoded=await decodeRecording(encoded.bytes);expect(decoded.metadata.recordingId).toBe(fixtures[i]!.metadata.recordingId);expect(decoded.metadata.schemaVersion).toBe('0.2.0');expect(decoded.metadata.recordingFormat).toBe('drone-lap-jsonl-gzip-v2');
+    expect(decoded.states.length).toBe(decoded.inputs.length+1);expect(decoded.recordedCheckpoints!.length).toBeLessThan(decoded.states.length);expect(decoded.recordedCheckpoints!.some(v=>v.tick===decoded.metadata.outcome.finalTick)).toBe(true);
+    const resim=resimulateRecording(decoded);expect(recordingWithinTolerance(resim)).toBe(true);expect(resim.maxPositionErrorM).toBeLessThanOrEqual(1e-9);
+    const path=`test-results/m3/fixture-${i+1}.jsonl.gz`;writeFileSync(path,encoded.bytes);paths.push(path);
   }
-  const validation=spawnSync('python3',['tools/validate.py',...paths],{encoding:'utf8'});
-  expect(validation.status,validation.stderr+'\n'+validation.stdout).toBe(0);expect(validation.stdout.match(/OK /g)?.length).toBe(3);
-  rmSync('test-results/m2',{recursive:true,force:true});
+  const validation=spawnSync('python3',['tools/validate.py',...paths],{encoding:'utf8'});expect(validation.status,validation.stderr+'\n'+validation.stdout).toBe(0);expect(validation.stdout.match(/OK /g)?.length).toBe(3);expect(validation.stdout).toContain('"schema_version": "0.2.0"');rmSync('test-results/m3',{recursive:true,force:true});
 });
 
-test('M2 기록은 사람 입력, applied input, Easy assist targets, 상태 N+1과 렌더 카메라 pose를 보존한다',async()=>{
-  const record=await fixture('contract','keyboard','assisted');
-  expect(record.inputs).toHaveLength(480);expect(record.states).toHaveLength(481);expect(record.controllerStates).toHaveLength(481);expect(record.frames).toHaveLength(120);
-  expect(record.inputs.every(v=>v.assistTargets!==null)).toBe(true);expect(record.frames[0]!.keysDown).not.toBeNull();
-  expect(record.frames.every(v=>v.cameraPose!==null)).toBe(true);expect(record.metadata.camera.renderPoseAtStart).toEqual(renderPose);
-  expect(record.metadata.schemaVersion).toBe('0.1.6');expect(record.metadata.physicsVersion).toBe(3);expect(record.metadata.partitionKey).toContain('device-keyboard');expect(record.metadata.trainingUse).toBe('flight_method');
+test('schema 0.2.0은 240Hz 사람/applied/assist targets를 보존하고 state는 10Hz checkpoint로 저장한다',async()=>{
+  const record=await fixture('contract','keyboard','assisted');expect(record.inputs).toHaveLength(480);expect(record.states).toHaveLength(481);expect(record.controllerStates).toHaveLength(481);expect(record.frames).toHaveLength(120);
+  expect(record.inputs.every(v=>v.assistTargets!==null)).toBe(true);expect(record.frames[0]!.keysDown).not.toBeNull();expect(record.frames.every(v=>v.cameraPose!==null)).toBe(true);expect(record.metadata.camera.renderPoseAtStart).toEqual(renderPose);expect(record.metadata.schemaVersion).toBe('0.2.0');expect(record.metadata.physicsVersion).toBe(3);expect(record.metadata.trainingUse).toBe('flight_method');expect(STATE_CHECKPOINT_INTERVAL_TICKS).toBe(24);
+  const encoded=await encodeRecording(record),decoded=await decodeRecording(encoded.bytes);expect(decoded.frames.every(v=>v.cameraPose===null)).toBe(true);expect(decoded.frames[0]!.normalizedPilotInput).toEqual(record.frames[0]!.normalizedPilotInput);expect(decoded.inputs).toEqual(record.inputs);expect(decoded.recordedCheckpoints!.length).toBe(21);
 });
