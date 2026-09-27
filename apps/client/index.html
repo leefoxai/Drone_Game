@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#101923" />
   <title>드론 시뮬레이터 · 비행 훈련장</title>
 </head>
@@ -11,9 +11,10 @@
   <div id="fpv-osd" aria-hidden="true"><div id="artificial-horizon"></div></div>
   <div id="height-assist" aria-live="polite" hidden>다음 게이트 · 0.0 m</div>
   <div id="ghost-status" hidden>GHOST · <span id="ghost-mode-label">STATE</span> · Δ <span id="ghost-error">0.000 m</span> / MAX <span id="ghost-max-error">0.000 m</span></div>
+  <div id="rotate-hint" hidden>가로 화면으로 돌리면 조종하기 편합니다.</div>
   <header>
     <div><p class="eyebrow">DRONE LAB / FLIGHT 02</p><h1>비행 훈련장</h1></div>
-    <div class="badges"><span id="tester-badge" hidden>FPV TESTER MODE</span><span id="mode-badge">쉬운 조종</span><span>240 Hz</span><span id="version">PHYSICS 3 / PROFILE 2</span></div>
+    <div class="badges"><span id="tester-badge" hidden>FPV TESTER MODE</span><span id="mobile-badge" hidden>TOUCH</span><span id="mode-badge">쉬운 조종</span><span>240 Hz</span><span id="version">PHYSICS 3 / PROFILE 2</span></div>
     <button id="panel-toggle" aria-expanded="true" aria-controls="controls">설정 접기</button>
   </header>
   <main>
@@ -33,7 +34,7 @@
       <div class="actions"><button id="camera" data-mode="chase">FPV로 전환 <kbd>C</kbd></button><button id="hover">호버 스로틀 <kbd>H</kbd></button></div>
       <label>트랙<select id="track-select"><option value="training-five-v2">훈련장 · 큰 게이트</option><option value="race-five-v2">대회용 · 1.8 m 게이트/고도 변화</option></select></label><p class="help" id="track-description">7 m × 5 m 게이트 5개와 지면 지지대가 있는 입문용 연습 루프</p>
       <label data-tester-control>조종 모드<select id="flight-mode"><option value="assisted">쉬운 조종 · 수평/고도/감속 보조</option><option value="acro">Acro · 직접 각속도 조종</option></select></label>
-      <label data-tester-control>입력 방식<select id="input-source"><option value="keyboard">키보드 · 테스트용</option><option value="gamepad">USB 조종기 / 게임패드</option></select></label>
+      <label data-tester-control>입력 방식<select id="input-source"><option value="keyboard">키보드 · 테스트용</option><option value="gamepad">USB 조종기 / 게임패드</option><option value="touch">터치 듀얼 스틱</option></select></label>
       <p class="help" id="control-help">↑↓ 앞뒤 이동 · ←→ 좌우 이동 · A/D 방향 전환<br>W/S 상승/하강 · 손을 놓으면 수평·감속·고도 보조<br>쉬운 조종은 최대 4 m/s의 연습 모드입니다.</p>
       <details open><summary>시야 · 연습 보조</summary>
         <label class="check-row"><input id="horizon-toggle" type="checkbox" checked> FPV 인공 수평선</label>
@@ -81,6 +82,24 @@
     </section>
     <canvas id="minimap" width="220" height="160" aria-label="게이트 순서와 드론 위치 지도"></canvas>
   </main>
+  <section id="touch-controls" hidden aria-label="모바일 터치 조종">
+    <div class="touch-stick-wrap touch-left-wrap">
+      <div class="touch-stick-label"><span>상승</span><span>YAW</span></div>
+      <div class="touch-stick" data-stick="left" role="application" aria-label="상승 하강 및 방향 전환 스틱"><div class="touch-cross"></div><div class="touch-thumb" data-thumb="left"></div></div>
+      <small>↑↓ 상승·하강 · ←→ 회전</small>
+    </div>
+    <div class="touch-actions" aria-label="모바일 비행 버튼">
+      <button id="touch-reset" type="button">RESET</button>
+      <button id="touch-camera" type="button">FPV</button>
+      <button id="touch-pause" type="button">PAUSE</button>
+      <button id="touch-settings" type="button">설정</button>
+    </div>
+    <div class="touch-stick-wrap touch-right-wrap">
+      <div class="touch-stick-label"><span>전진</span><span>MOVE</span></div>
+      <div class="touch-stick" data-stick="right" role="application" aria-label="전후 좌우 이동 스틱"><div class="touch-cross"></div><div class="touch-thumb" data-thumb="right"></div></div>
+      <small>↑↓ 전후 · ←→ 좌우 이동</small>
+    </div>
+  </section>
   <script type="module" src="/src/consent-ui.ts"></script>
   <script type="module" src="/src/main.ts"></script>
 </body>
