@@ -6,7 +6,7 @@ import { DRONE_COLLISION_RADIUS_M, GATE_FRAME_THICKNESS_M, GATES, RACE_TRACK, TR
 import { DRONE_VISUAL_RADIUS_M } from '../apps/client/src/world';
 import { Race } from '../packages/physics/src/race';
 import type { Vec3 } from '../packages/physics/src/index';
-import { assistedInput } from '../packages/physics/src/assist';
+import { applyAssistTargets, assistedCommand, assistedInput, commandToAssistTargets } from '../packages/physics/src/assist';
 
 test('M1 v2 프로파일: 약 10:1 명목 추력대중량비와 Betaflight 기본 rates', () => {
   expect(profile.version).toBe(2);
@@ -139,4 +139,18 @@ test('쉬운 조종은 전진 후 손을 놓으면 감속하고 고도를 유지
   expect(Math.hypot(...s.velocity)).toBeLessThan(.2);
   expect(Math.abs(s.position[1]-3)).toBeLessThan(.3);
   expect(rotate(s.orientation,[0,1,0])[1]).toBeGreaterThan(.995);
+});
+
+test('Easy refactor는 기존 command→appliedInput 결과를 그대로 유지한다',()=>{
+  const commands=[
+    {throttle:.5,roll:0,pitch:0,yaw:0},
+    {throttle:1,roll:.7,pitch:-.4,yaw:.6},
+    {throttle:0,roll:-1,pitch:.8,yaw:-1},
+  ];
+  const s=initialState(profile);
+  for(const command of commands){
+    const combined=assistedCommand(s,command,profile),targets=commandToAssistTargets(s,command),split=applyAssistTargets(s,targets,profile);
+    expect(targets).toEqual(combined.targets);expect(split).toEqual(combined.appliedInput);
+    step(s,combined.appliedInput,profile);
+  }
 });
