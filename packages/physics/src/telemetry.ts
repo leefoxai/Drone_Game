@@ -3,7 +3,7 @@ import type { AssistTargets } from './assist';
 
 export type ControlMode = 'assisted' | 'acro';
 export type CameraMode = 'chase' | 'fpv';
-export type InputDeviceKind = 'keyboard' | 'gamepad' | 'rc_joystick';
+export type InputDeviceKind = 'keyboard' | 'gamepad' | 'rc_joystick' | 'touch';
 export type TrainingUse = 'stick_pattern' | 'flight_method';
 
 export interface CameraSnapshot {
@@ -71,7 +71,7 @@ function sameInput(a:Input,b:Input):boolean {
 }
 
 /** Single source of truth for training-use classification. */
-export function classifyTrainingUse(context:ControlContext,inputs:readonly InputRecord[]):TrainingUse {
+export function classifyTrainingUse(context:ControlContext,inputs:readonly InputRecord[]):TrainingUse{
   const directStickDevice=context.inputDeviceKind==='gamepad'||context.inputDeviceKind==='rc_joystick';
   const directAcro=context.controlMode==='acro'&&context.assistVersion===null&&directStickDevice;
   const everySampleDirect=inputs.length>0&&inputs.every(sample=>sameInput(sample.pilotInput,sample.appliedInput));
@@ -86,7 +86,7 @@ export function publicLeaderboardEligible(context:Pick<ControlContext,'testerMod
  * Returns a training-view selection without mutating or deleting original lap records.
  * stick_pattern selection is intentionally strict so flight_method records cannot leak in.
  */
-export function selectTrainingRecords(records:readonly LapRecord[],use:TrainingUse):LapRecord[] {
+export function selectTrainingRecords(records:readonly LapRecord[],use:TrainingUse):LapRecord[]{
   return records.filter(record=>record.valid&&record.trainingUse===use&&classifyTrainingUse(record,record.inputs)===use);
 }
 
