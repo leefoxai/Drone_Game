@@ -32,6 +32,8 @@ try{
   browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:640,height:360},deviceScaleFactor:1});await page.goto(URL);
   const bytes=await readFile(source),base64=bytes.toString('base64');
   const loaded=await page.evaluate(async value=>window.m3Render.load(value),base64);
+  if(loaded.trainingUse!=='flight_method')throw new Error(`M3 BC renderer requires flight_method, got ${loaded.trainingUse}`);
+  if(!loaded.consent.granted||!loaded.consent.scope.includes('local_bc_training'))throw new Error('recording is not consented for local_bc_training');
   const labels=[];const imageHashes=[];
   for(let i=0;i<loaded.frameCount;i++){
     const label=await page.evaluate(async index=>window.m3Render.frame(index),i);labels.push(label);
@@ -43,7 +45,7 @@ try{
   const csvRows=[header.join(',')];for(const v of labels)csvRows.push([v.frameIndex,v.frameTimeS.toFixed(9),v.simulationTick,v.stateIndex,v.nextGateIndex,v.assistTargetVx,v.assistTargetVz,v.assistTargetVertical,v.assistTargetYawRate].map(csv).join(','));
   const labelsPath=path.join(output,'frame_labels.csv');await writeFile(labelsPath,csvRows.join('\n')+'\n','utf8');
   const planHash=createHash('sha256').update(JSON.stringify(labels)).digest('hex');const frameHash=createHash('sha256').update(imageHashes.join('\n')).digest('hex');
-  const manifest={recordingId:loaded.recordingId,schemaVersion:loaded.schemaVersion,source:path.relative(ROOT,source).replaceAll('\\','/'),render:{cameraMode:'fpv',width:640,height:360,fps:30,verticalFovDeg:75,fpvTiltDeg:15,hud:false},seconds:loaded.seconds,frameCount:loaded.frameCount,planSha256:planHash,framesSha256:frameHash,labels:'frame_labels.csv',video:'flight.mp4'};
+  const manifest={recordingId:loaded.recordingId,schemaVersion:loaded.schemaVersion,trackId:loaded.trackId,partitionKey:loaded.partitionKey,trainingUse:loaded.trainingUse,consent:loaded.consent,source:path.relative(ROOT,source).replaceAll('\\','/'),render:{cameraMode:'fpv',width:640,height:360,fps:30,verticalFovDeg:75,fpvTiltDeg:15,hud:false},seconds:loaded.seconds,frameCount:loaded.frameCount,planSha256:planHash,framesSha256:frameHash,labels:'frame_labels.csv',video:'flight.mp4'};
   await writeFile(path.join(output,'render_manifest.json'),JSON.stringify(manifest,null,2)+'\n','utf8');
   const mp4=path.join(output,'flight.mp4');const ff=spawnSync('ffmpeg',['-y','-loglevel','error','-framerate','30','-i',path.join(temp,'frame_%06d.png'),'-c:v','libx264','-preset','medium','-crf','18','-pix_fmt','yuv420p',mp4],{stdio:'inherit'});if(ff.status!==0)throw new Error('ffmpeg encode failed');
   console.log(JSON.stringify({output:path.relative(ROOT,output).replaceAll('\\','/'),frameCount:loaded.frameCount,planSha256:planHash,framesSha256:frameHash},null,2));
