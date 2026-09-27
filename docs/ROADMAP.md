@@ -11,7 +11,7 @@
 - M0 완료
 - M1 완료
 - M2 완료
-- **M3 진행 중 — 최소 학습 활용 동의 기능 구현·배포 완료, 사용자 동의 랩 3~5개 생성 대기**
+- **M3 진행 중 — 동의된 사용자 랩 3개 확보, compact schema 0.2.0 및 로컬 FPV→BC→bot 파이프라인 구현 완료, 사용자 직접 확인 대기**
 - M4~M8 미시작
 - 공개 제품은 keyboard + Easy. Acro/Gamepad/RC/Rates/보정은 `?tester=1` 전용
 
@@ -21,18 +21,9 @@ Git, npm workspace, TypeScript/Vite/Three.js, 기본 문서와 프로젝트 뼈�
 
 ## M1 · 비행 프로토타입 — 완료
 
-드론 1대, 대형 게이트 훈련장과 실제 크기·고도 변화가 있는 대회용 트랙, Easy/Acro, Gamepad/RC 입력, 튜닝 패널과 고정 240 Hz shared physics를 구현했다.
+드론 1대, 훈련/대회 트랙, Easy/Acro, Gamepad/RC 입력, 튜닝 패널, 고정 240 Hz shared physics를 구현했다.
 
-M1 안정화에서:
-
-- 보이는 게이트/드론 크기와 충돌 의미 정합화
-- 게이트 다리/그림자/크기 기준물
-- 낮춘 chase camera / FPV 인공 수평선 / 높이 차 보조
-- 공개 keyboard+Easy / tester Acro+외부입력 분리
-- partition key와 `training_use` 계약 확정
-- GitHub Actions test gate와 Pages 배포
-
-를 완료했다.
+안정화에서 시각/충돌 정합화, gate support, chase/FPV, 공개 keyboard+Easy / tester 고급입력 분리, partition/training_use, CI/Pages를 완료했다.
 
 ## Acro 공개 · 조건부 마일스톤
 
@@ -41,7 +32,7 @@ M2 이후와 병행하며 완료 전까지 Acro와 외부 입력 장치는 `?tes
 공개 전 조건:
 
 1. 실제 FPV 조종자 여러 명의 RC joystick 테스트
-2. 대표 Gamepad/RC의 축 매핑·끝점·반전·deadzone 호환성 확인
+2. 대표 Gamepad/RC 축 매핑·끝점·반전·deadzone 확인
 3. Acro rates / FPV tilt 공개 기본값 확정
 4. 잘못된 축/중립/끝점 보정 거부 확인
 5. `stick_pattern`과 keyboard/Easy 데이터 격리 확인
@@ -50,24 +41,20 @@ M2 이후와 병행하며 완료 전까지 Acro와 외부 입력 장치는 `?tes
 
 ## M2 · 기록·고스트 — 완료
 
-M1 `telemetry.ts`와 `data_spec` 계약을 그대로 확장했다. 별도 학습 기록 형식은 만들지 않는다. schema는 **0.1.6**이다.
+M2 schema **0.1.6**에서 다음을 구현했다.
 
-구현:
-
-- 매 rAF frame: key state 또는 joystick raw+normalized input, input-read time, rAF timestamp, simulation tick/alpha
-- 매 physics tick: pilot/applied input, Easy assist target, full state, controller hidden state
-- gate/collision/complete/abort event
-- data_spec 필수 metadata와 snapshot/payload SHA-256
-- 한 랩 단위 `.jsonl.gz`
+- rAF input/camera 관측
+- 240 Hz pilot/applied input, Easy assist target, full state/controller state
+- events / metadata / SHA-256
+- 한 랩 `.jsonl.gz`
 - IndexedDB 영속 저장
-- 로컬 기록 목록 / replay / export / delete
-- 현재 partition의 personal-best ghost
-- recorded-state replay와 authoritative-input re-simulation
-- 두 경로의 현재/최대 position error 표시
-- `tools/validate.py`
-- deterministic sample lap 3개 gzip round-trip + validator + re-simulation regression
+- 목록/replay/export/delete
+- personal-best state/resim ghost
+- position error UI
+- Python validator
+- deterministic fixture regression
 
-자동 회귀 허용 오차:
+회귀 허용 오차:
 
 ```text
 position <= 1e-9 m
@@ -76,225 +63,196 @@ orientation <= 1e-10
 angular velocity <= 1e-9 rad/s
 ```
 
-**사용자가 직접 확인한 완료 게이트**
-
-1. 배포 사이트에서 한 랩 완주 후 기록 목록 생성 확인
-2. 새로고침 후 IndexedDB 기록 유지 확인
-3. 같은 조건 최고랩 ghost와 실제 주행 확인
-4. state / resim ghost 전환과 position error 표시 확인
-5. `.jsonl.gz` export 확인
-6. 실제 export가 `python3 tools/validate.py <file>` 통과
+사용자가 배포 사이트 완주, 새로고침 유지, ghost, state/resim, export, 실제 validator 통과를 직접 확인했다.
 
 **M2 완료 판정: 2026-09-26.**
 
 ## M3 · 파이프라인 시험과 기록 형식 확정 — 진행 중
 
-자신의 동의된 기록 몇 랩으로 FPV 영상 리렌더 → 입력/영상 정렬 → 작은 BC 학습 → 봇 추론까지 한 번 끝까지 수행한다. 대량 수집 전에 반드시 거친다.
+자신의 동의된 기록 몇 랩으로 FPV 영상 리렌더 → 입력/영상 정렬 → 작은 BC 학습 → bot 추론까지 한 번 끝까지 수행한다. 대량 수집 전에 반드시 거친다.
 
-### Phase 1 · 최소 학습 활용 동의 — 구현·배포 완료
+### Phase 1 · 최소 학습 활용 동의 — 완료
 
-정식 M4 동의 시스템 전에 M3 로컬 학습 시험을 위한 최소 체크를 기록 화면에 추가했다.
+기록 화면에 기본 OFF 체크를 추가했다.
 
 ```text
 □ 내 비행 기록을 AI 학습 시험에 활용하는 데 동의합니다.
 ```
 
-규칙:
+- 랩 시작 순간 consent snapshot
+- 진행 중/과거 랩 소급 변경 없음
+- ON 이후 새 랩부터 적용
+- scope `local_bc_training`
+- M4 정식 동의 시스템의 기반
 
-- 최초 기본값 OFF
-- ON/OFF 상태는 로컬 설정으로 보존
-- **랩이 실제 시작되는 순간**의 상태를 recording metadata `consent`에 snapshot
-- 진행 중 변경은 현재 랩에 소급되지 않음
-- 다음 새 랩부터 변경 상태 적용
-- 과거 기록 소급 변경 없음
-- OFF 기록도 로컬 원본은 보존 가능
+### Phase 2 · 사용자 동의 실제 기록 — 완료
 
-동의 ON:
+사용자가 동일 partition의 complete `flight_method` 랩 3개를 제공했다.
 
 ```text
-scope = ["local_bc_training"]
-policyVersion = "m3-local-training-v1"
+training-five-v2
+keyboard
+Easy / assisted
+physics 3
+profile 2
+assist 1
+chase
+horizon off
+height assist on
+tester off
+consent = true / local_bc_training
 ```
 
-기존 data_spec 0.1.6의 consent 필드를 사용하므로 Phase 1에서는 schema version을 올리지 않았다.
+세 파일 모두 0.1.6 validator를 통과했다.
 
-### Phase 2 · 사용자 실제 기록 — 현재 대기 지점
+### Phase 3 · 실제 용량 분석과 schema 0.2.0 — 구현 완료
 
-사용자가 다음 조건으로 complete lap 3~5개를 기록한다.
+실제 0.1.6 사용자 3랩의 60초 환산 gzip 중앙값은 약 **8.42 MB**였다.
 
-권장 조건:
+병목은 `states + controller_states`로 압축 기여도의 약 87%였다.
+
+따라서 schema를 **0.2.0**으로 올렸다.
 
 ```text
-track: race-five-v2
-input: keyboard
-control: Easy / assisted
-camera: FPV
-same assist/camera settings
-consent: ON before lap start
+recordingFormat = drone-lap-jsonl-gzip-v2
+inputChunkSize = 256 ticks
+stateCheckpointIntervalTicks = 24 ticks (10 Hz)
 ```
 
-각 랩을 `.jsonl.gz`로 내보내고 다음 경로에만 둔다.
+유지:
 
-```text
-local_data/m3/source/
-```
+- 240 Hz pilotInput
+- 240 Hz authoritative appliedInput
+- 240 Hz Easy assistTargets
+- initial state/profile/physics version
+- event/camera/consent/partition/training_use
 
-Git에는 기록 원본을 커밋하지 않는다.
+변경:
 
-### Phase 3 · 실제 용량 측정과 형식 개선안 확정
+- input row → `input_chunks`
+- full states → 10 Hz + event/final `state_checkpoints`
+- 별도 `controller_states` disk channel 제거
+- 반복 frame cameraPose 제거
+- decode 시 shared physics로 240 Hz full state 재구성
+- checkpoint와 re-simulation 결과 비교
 
-사용자 실제 파일에서 먼저 다음 byte breakdown을 측정한다.
+기존 0.1.6 read/validate 호환과 converter를 유지한다.
 
-- metadata
-- frames
-- inputs
-- states
-- controller_states
-- events
-- camera_changes
-- gzip total
-- bytes/sec
-- 60초 환산
+사용자 실제 3랩을 동일 0.2.0 구조로 재포장한 60초 환산은 각각 약 **0.994 / 0.993 / 0.986 MB**로 목표 범위에 들어왔다.
 
-M2 실제 export는 약 26.6초에 gzip 약 3.70 MB였으므로 단순 60초 환산은 약 8 MB대다.
+최종 M3 완료 전에는 native 0.2.0 실제 30/60/90초 기록을 다시 측정한다.
 
-M3 목표:
+### Phase 4 · FPV deterministic re-render — 구현 완료 / 직접 확인 대기
 
-```text
-60초 complete Easy lap gzip 약 1 MB
-목표 범위 0.8~1.2 MB
-```
+`tools/render_dataset.mjs`를 구현했다.
 
-단 다음은 유지한다.
-
-- authoritative `appliedInput`
-- Easy `assistTargets`
-- 초기 상태와 동일 physics version으로 re-simulation 가능
-- checkpoint 기반 state 검증
-- 원본 metadata / partition / training_use / consent 의미
-
-우선 검토할 개선:
-
-1. 240 Hz `appliedInput` / `pilotInput` / Easy `assistTargets` 유지
-2. 240 Hz full state → initial state + 주기적 full checkpoint + terminal/event checkpoint 검토
-3. `states`와 `controller_states` 중복 제거 검토
-4. input rows chunking으로 JSON key 반복 축소
-5. frame camera pose 재구성 검증 후 반복 저장 제거 검토
-
-breaking change라면 `schema_version`을 올리고 recorder/codec/validator/sample/ghost/regression을 함께 갱신한다. 기존 0.1.6 파일은 보존한다.
-
-### Phase 4 · FPV deterministic re-render와 정렬 확인
-
-자신의 3~5개 동의 랩으로 표준 FPV 영상을 생성한다.
-
-초기 표준 렌더 조건:
+표준 조건:
 
 ```text
 FPV
 640×360
 30 fps
-fixed FOV
+vertical FOV 75°
+FPV tilt 15°
 HUD/OSD 제외
 ```
 
-생성물은 모두 `local_data/` 아래에만 둔다.
+출력은 전부 `local_data/`:
 
 ```text
-local_data/m3/renders/<recording_id>/flight.mp4
-local_data/m3/renders/<recording_id>/frame_labels.csv
-local_data/m3/renders/<recording_id>/render_manifest.json
+local_data/m3/renders/<recording_id>/
+  flight.mp4
+  frame_labels.csv
+  render_manifest.json
 ```
 
-출발·급회전·게이트 통과 frame에서 영상 frame time ↔ physics tick ↔ event ↔ 학습 label 정렬을 직접 확인한다.
+`frame_labels.csv` label은 `assist_targets` 4개뿐이다. 동일 recording 재렌더 비교용 `planSha256` / `framesSha256`를 manifest에 저장한다.
 
-동일 recording을 두 번 렌더해 frame count와 time metadata가 재현되는지도 확인한다.
+### Phase 5 · flight_method BC — 구현 완료 / 실제 학습 확인 대기
 
-### Phase 5 · `flight_method` BC 학습
-
-사용자의 키보드 + Easy 랩은 `flight_method`다.
-
-학습 대상 조건:
+학습 대상:
 
 ```text
-outcome == complete
+complete
 consent.granted == true
-consent.scope contains local_bc_training
+local_bc_training scope
 training_use == flight_method
-동일 partition 조건
+same partition
 ```
 
-**정답으로 `appliedInput`을 사용하지 않는다.**
+**`appliedInput`을 정답으로 사용하지 않는다.**
 
-BC 출력은 data_spec의 Easy `assistTargets` 4개다.
+BC output:
 
 ```text
-horizontalVelocityWorldMps.x
-horizontalVelocityWorldMps.z
-verticalVelocityMps
-yawRateRadPerSec
+assist_target_vx
+assist_target_vz
+assist_target_vertical
+assist_target_yaw_rate
 ```
 
-한 complete lap 전체를 validation으로 분리한다. 같은 랩의 frame을 train/validation 양쪽에 나누지 않는다.
+`tools/train_bc.py`는 한 complete lap 전체를 validation holdout으로 두는 CPU PyTorch 작은 MLP를 학습한다.
 
-작은 CPU BC 모델로 end-to-end pipeline을 검증한다.
+모든 모델/metric은 `local_data/m3/models/` 아래에만 둔다.
 
-### Phase 6 · bot 연결
+### Phase 6 · bot 연결 — 구현 완료 / 로컬 확인 대기
 
-기존 Easy assist를 다음 두 단계로 분리하되 제어법 자체는 바꾸지 않는다.
+Easy assist를 제어법 변화 없이 분리했다.
 
 ```text
-human command → assist_targets → existing assist controller → appliedInput
-BC FPV       → predicted assist_targets → existing assist controller → appliedInput
+human command → commandToAssistTargets() → applyAssistTargets() → appliedInput
+BC FPV → predicted assist_targets → applyAssistTargets() → appliedInput → physics
 ```
 
-봇은 예측 `assist_targets`를 기존 보조 장치에 넣어 비행한다.
+로컬 dev bot:
 
-모델과 추론 결과물은 `local_data/`에만 두며, bot 추론 확인은 **로컬 개발 서버**에서만 한다. production Pages에는 M3 bot을 공개하지 않는다.
+```text
+npm run dev
+http://localhost:5173/bot.html
+```
 
-### Phase 7 · `stick_pattern` 격리 시험
+production 메인 UI에는 노출하지 않는다.
+
+### Phase 7 · stick_pattern 격리 — 자동 검사 구현
 
 M3에서는 stick model을 학습하지 않는다.
 
-기존 tester fixture로:
+- RC/gamepad + Acro direct → stick_pattern
+- keyboard + Easy → flight_method
+- 미동의/미완주 제외
+- 잘못 라벨된 training_use 차단
+- flight_method → stick_pattern 누출 0건
 
-- RC/gamepad + Acro direct input이 `stick_pattern` export 가능
-- keyboard + Easy 및 joystick + Easy가 `stick_pattern`에 0건
-- 잘못 라벨된 `flight_method`도 exporter가 차단
+### Phase 8 · benchmark / browser re-simulation — 도구 구현, 실제 확인 대기
 
-을 확인한다.
+도구:
 
-### Phase 8 · benchmark와 browser re-simulation
+- `tools/benchmark_recordings.py`
+- `tools/browser_resim.mjs`
+- `navigator.storage.estimate()`
 
-최종 형식 기준 실제 30/60/90초에 대해:
-
-- raw/gzip bytes
-- encode/decode CPU time
-- re-simulation time
-- 가능한 범위의 peak memory
-- IndexedDB quota (`navigator.storage.estimate()`)
-
-를 측정한다.
-
-같은 recording을 Chromium / Firefox / WebKit에서 재시뮬레이션해 checkpoint 오차도 측정한다.
+실제 30/60/90초 native v2 용량/CPU/메모리/quota와 Chromium/Firefox/WebKit checkpoint re-simulation을 확인한다.
 
 ### M3 내가 직접 확인하는 방법
 
 아래를 모두 직접 확인해야 M3 완료다.
 
 1. 동의 OFF 기록이 학습 목록/export에서 제외된다.
-2. 동의 ON 뒤 **새로 시작한 랩만** 동의 기록이 되며, 과거/진행 중 랩에 소급되지 않는다.
+2. 동의 ON 뒤 **새로 시작한 랩만** 동의 기록이 되며 과거/진행 중 랩에 소급되지 않는다.
 3. 자신의 3~5개 `flight_method` 랩으로 MP4와 frame/input 대응표가 생성된다.
 4. 출발·급회전·게이트 통과 frame에서 영상과 label 시간 정렬이 맞는다.
-5. 동일 recording을 다시 렌더했을 때 frame count/time metadata가 동일하다.
+5. 동일 recording 재렌더의 frame count/time metadata가 동일하다.
 6. 한 complete lap 전체를 validation으로 제외한 CPU BC 학습이 완료된다.
 7. BC label/output이 `assist_targets`이며 `appliedInput`이 정답으로 사용되지 않았음을 확인한다.
 8. tester `stick_pattern` export가 되고 `flight_method` 누출이 0건이다.
-9. 학습하지 않은 랩 조건에서 로컬 개발 서버 bot이 predicted assist_targets → 기존 Easy assist → physics 경로로 비행한다.
+9. 학습하지 않은 랩 조건에서 local bot이 predicted assist_targets → 기존 Easy assist → physics 경로로 비행한다.
 10. 실제 30/60/90초 용량/CPU/메모리/IndexedDB quota를 확인하고 60초 gzip이 약 1 MB 목표에 근접한다.
 11. 브라우저 간 re-simulation 오차 결과를 확인한다.
-12. recording, MP4, 대응표, benchmark, dataset, 모델, metric이 모두 `local_data/` 아래에 있고 Git 추적 대상이 아니다.
+12. recording, MP4, 대응표, benchmark, dataset, model, metric이 모두 `local_data/` 아래에 있고 Git 추적 대상이 아니다.
 
-위 항목 중 하나라도 실패하면 M4로 넘어가지 않는다.
+**하나라도 실패하면 M4로 넘어가지 않는다.**
+
+로컬 실행 순서는 `docs/M3_LOCAL_PIPELINE.md`를 따른다.
 
 ## M4 · 공개
 
@@ -315,7 +273,7 @@ M3 최소 동의 UI를 바탕으로 계정 기반 동의 version/time/철회 이
 
 ## M5 · 모드 확장
 
-장애물 코스, PVE, 비동기 팀 레이스를 추가하고 모든 성공·실패·점수·팀 합산 규칙을 versioned ruleset으로 관리한다.
+장애물 코스, PVE, 비동기 팀 레이스를 추가하고 성공·실패·점수·팀 합산 규칙을 versioned ruleset으로 관리한다.
 
 확인 항목:
 
@@ -338,7 +296,7 @@ Playwright headless browser로 MP4 + depth/segmentation/gate-corner label을 대
 
 ## M7 · AI 봇
 
-검증된 기록으로 Python/PyTorch BC를 CPU에서 시작하고 ONNX로 내보내 브라우저에서 실행한다. 이후 강화학습으로 보정한다.
+검증된 기록으로 Python/PyTorch BC를 확장하고 ONNX로 내보내 브라우저에서 실행한다. 이후 강화학습으로 보정한다.
 
 확인 항목:
 
