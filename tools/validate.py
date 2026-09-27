@@ -17,7 +17,7 @@ INPUT_CHUNK_SIZE = 256
 STATE_CHECKPOINT_INTERVAL_TICKS = 24
 LEGACY_CHANNELS = {"frames", "inputs", "states", "controller_states", "events", "camera_changes"}
 V2_CHANNELS = {"frames", "input_chunks", "state_checkpoints", "events", "camera_changes"}
-DEVICE_KINDS = {"keyboard", "gamepad", "rc_joystick"}
+DEVICE_KINDS = {"keyboard", "gamepad", "rc_joystick", "touch"}
 TRAINING_USES = {"stick_pattern", "flight_method"}
 OUTCOMES = {"complete", "invalid", "aborted"}
 
@@ -104,7 +104,7 @@ def validate_frames(meta: dict, frames: list[dict], require_pose: bool) -> None:
         if i and frame["inputReadMonotonicMs"] < frames[i-1]["inputReadMonotonicMs"]: fail("input-read timestamps are not monotonic")
         if "normalizedPilotInput" not in frame: fail(f"frames[{i}] normalizedPilotInput missing")
         if meta["inputDeviceKind"] == "keyboard" and frame.get("keysDown") is None: fail(f"frames[{i}] keyboard keysDown missing")
-        if meta["inputDeviceKind"] != "keyboard" and frame.get("rawAxes") is None: fail(f"frames[{i}] joystick rawAxes missing")
+        if meta["inputDeviceKind"] != "keyboard" and frame.get("rawAxes") is None: fail(f"frames[{i}] non-keyboard rawAxes missing")
         if require_pose and frame.get("cameraPose") is None: fail(f"frames[{i}] cameraPose missing")
         if frame.get("cameraPose") is not None: validate_camera_pose(frame["cameraPose"], f"frames[{i}].cameraPose")
 
