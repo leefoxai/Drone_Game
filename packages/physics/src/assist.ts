@@ -33,18 +33,26 @@ function inverseRate(target:number,p:Profile):number {
   return (low+high)/2;
 }
 
-/**
- * Beginner velocity/level assistance plus the targets that produced the applied input.
- * throttle 0.5 = zero vertical speed. No position teleport or artificial velocity reset.
- * This function exposes telemetry only; it does not change the assist control law.
- */
-export function assistedCommand(s:State,command:Input,p:Profile):AssistedCommandResult {
+/** Human Easy command -> velocity/yaw targets. */
+export function commandToAssistTargets(s:State,command:Input):AssistTargets {
   const settings=ASSIST_SETTINGS;
   const forward=rotate(s.orientation,[0,0,-1]);
   const length=Math.hypot(forward[0],forward[2]);
   const fx=length>.001?forward[0]/length:0,fz=length>.001?forward[2]/length:-1;
   const vx=(-fx*command.pitch+fz*command.roll)*settings.horizontalSpeedMps;
   const vz=(-fz*command.pitch-fx*command.roll)*settings.horizontalSpeedMps;
+  const verticalCommand=Math.abs(command.throttle-.5)<.04?0:(command.throttle-.5)*2;
+  return {
+    horizontalVelocityWorldMps:[vx,vz],
+    verticalVelocityMps:verticalCommand*settings.verticalSpeedMps,
+    yawRateRadPerSec:command.yaw*settings.yawRateRadS,
+  };
+}
+
+/** Velocity/yaw targets -> authoritative physics input. Shared by human Easy and the M3 BC bot. */
+export function applyAssistTargets(s:State,targets:AssistTargets,p:Profile):Input {
+  const settings=ASSIST_SETTINGS;
+  const [vx,vz]=targets.horizontalVelocityWorldMps;
   let ax=(vx-s.velocity[0])*settings.velocityGain,az=(vz-s.velocity[2])*settings.velocityGain;
   const acc=Math.hypot(ax,az);
   if(acc>settings.maxHorizontalAcceleration){ax*=settings.maxHorizontalAcceleration/acc;az*=settings.maxHorizontalAcceleration/acc;}
@@ -53,21 +61,23 @@ export function assistedCommand(s:State,command:Input,p:Profile):AssistedCommand
   const error:Vec3=[up[1]*desired[2]-up[2]*desired[1],up[2]*desired[0]-up[0]*desired[2],up[0]*desired[1]-up[1]*desired[0]];
   const [x,y,z,w]=s.orientation,inverse:Quat=[-x,-y,-z,w];
   const bodyError=rotate(inverse,error);
-  const verticalCommand=Math.abs(command.throttle-.5)<.04?0:(command.throttle-.5)*2;
-  const wantedVerticalSpeed=verticalCommand*settings.verticalSpeedMps;
-  const wantedYawRate=command.yaw*settings.yawRateRadS;
-  const thrust=p.massKg*Math.max(0,G+settings.verticalGain*(wantedVerticalSpeed-s.velocity[1]))/Math.max(.3,up[1]);
+  const thrust=p.massKg*Math.max(0,G+settings.verticalGain*(targets.verticalVelocityMps-s.velocity[1]))/Math.max(.3,up[1]);
   const available=4*p.maxMotorThrustN*(s.voltage/p.batteryFullV)**2;
-  const appliedInput:Input={
+  return {
     throttle:Math.sqrt(clamp(thrust/available,0,1)),
     pitch:inverseRate(clamp(bodyError[0]*settings.levelGain,-1.6,1.6),p),
     roll:inverseRate(clamp(bodyError[2]*settings.levelGain,-1.6,1.6),p),
-    yaw:inverseRate(wantedYawRate,p),
+    yaw:inverseRate(targets.yawRateRadPerSec,p),
   };
-  return {
-    appliedInput,
-    targets:{horizontalVelocityWorldMps:[vx,vz],verticalVelocityMps:wantedVerticalSpeed,yawRateRadPerSec:wantedYawRate},
-  };
+}
+
+/**
+ * Beginner velocity/level assistance plus the targets that produced the applied input.
+ * Refactored as command -> targets -> controller without changing the control law.
+ */
+export function assistedCommand(s:State,command:Input,p:Profile):AssistedCommandResult {
+  const targets=commandToAssistTargets(s,command);
+  return {targets,appliedInput:applyAssistTargets(s,targets,p)};
 }
 
 /** Backward-compatible helper used by existing physics callers/tests. */
