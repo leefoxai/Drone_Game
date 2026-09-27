@@ -31,7 +31,7 @@ test('3D 훈련장을 렌더링하고 높이 단서·그림자·화면 크기 �
     height: element.clientHeight,
     bufferWidth: (element as HTMLCanvasElement).width,
   }))).toEqual({ width: 390, height: 844, bufferWidth: 390 });
-  await expect(page.getByRole('heading', { level: 1 })).toBeInViewport();
+  await expect(page.locator('.flight-hud')).toBeInViewport();
   await page.screenshot({ path: 'test-results/flight-mobile.png' });
   expect(errors).toEqual([]);
 });
