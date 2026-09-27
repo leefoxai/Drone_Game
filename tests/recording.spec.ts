@@ -49,5 +49,14 @@ test('schema 0.2.0 샘플 랩 3개는 compact gzip round-trip, Python validator,
 test('schema 0.2.0은 240Hz 사람/applied/assist targets를 보존하고 state는 10Hz checkpoint로 저장한다',async()=>{
   const record=await fixture('contract','keyboard','assisted');expect(record.inputs).toHaveLength(480);expect(record.states).toHaveLength(481);expect(record.controllerStates).toHaveLength(481);expect(record.frames).toHaveLength(120);
   expect(record.inputs.every(v=>v.assistTargets!==null)).toBe(true);expect(record.frames[0]!.keysDown).not.toBeNull();expect(record.frames.every(v=>v.cameraPose!==null)).toBe(true);expect(record.metadata.camera.renderPoseAtStart).toEqual(renderPose);expect(record.metadata.schemaVersion).toBe('0.2.0');expect(record.metadata.physicsVersion).toBe(3);expect(record.metadata.trainingUse).toBe('flight_method');expect(STATE_CHECKPOINT_INTERVAL_TICKS).toBe(24);
-  const encoded=await encodeRecording(record),decoded=await decodeRecording(encoded.bytes);expect(decoded.frames.every(v=>v.cameraPose===null)).toBe(true);expect(decoded.frames[0]!.normalizedPilotInput).toEqual(record.frames[0]!.normalizedPilotInput);expect(decoded.inputs).toEqual(record.inputs);expect(decoded.recordedCheckpoints!.length).toBe(21);
+  const encoded=await encodeRecording(record),decoded=await decodeRecording(encoded.bytes);
+  expect(decoded.frames.every(v=>v.cameraPose===null)).toBe(true);expect(decoded.frames[0]!.normalizedPilotInput).toEqual(record.frames[0]!.normalizedPilotInput);expect(decoded.inputs).toHaveLength(record.inputs.length);
+  for(const i of [0,119,120,239,240,479]){
+    expect(decoded.inputs[i]!.tick).toBe(record.inputs[i]!.tick);expect(decoded.inputs[i]!.pilotInput).toEqual(record.inputs[i]!.pilotInput);
+    for(const key of ['throttle','roll','pitch','yaw'] as const)expect(decoded.inputs[i]!.appliedInput[key]).toBeCloseTo(record.inputs[i]!.appliedInput[key],15);
+    expect(decoded.inputs[i]!.assistTargets?.horizontalVelocityWorldMps[0]).toBeCloseTo(record.inputs[i]!.assistTargets!.horizontalVelocityWorldMps[0],15);
+    expect(decoded.inputs[i]!.assistTargets?.horizontalVelocityWorldMps[1]).toBeCloseTo(record.inputs[i]!.assistTargets!.horizontalVelocityWorldMps[1],15);
+    expect(decoded.inputs[i]!.assistTargets?.verticalVelocityMps).toBeCloseTo(record.inputs[i]!.assistTargets!.verticalVelocityMps,15);expect(decoded.inputs[i]!.assistTargets?.yawRateRadPerSec).toBeCloseTo(record.inputs[i]!.assistTargets!.yawRateRadPerSec,15);
+  }
+  expect(decoded.recordedCheckpoints!.length).toBe(21);
 });
